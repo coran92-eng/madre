@@ -6,7 +6,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser, requireRole, auditContext, clientIp } from "@/lib/auth";
 import { canAccessLocal } from "@/lib/rbac";
+import { randomUUID } from "crypto";
+import path from "path";
 import { audit } from "@/lib/audit";
+import { saveFile } from "@/lib/storage";
 
 function slugify(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -96,4 +99,25 @@ export async function confirmRead(sectionId: string): Promise<void> {
   });
   await audit({ ...auditContext(user), localId: section.localId, action: "manual.read", entity: "ManualSection", entityId: sectionId, detail: { version: section.version } });
   revalidatePath("/manual");
+}
+
+// ── Imágenes del manual (spec §4.6) ─────────────────────────────────────────
+
+export async function uploadManualImage(formData: FormData): Promise<{ error?: string; url?: string }> {
+  const user = await requireRole("SUPERADMIN", "ENCARGADO");
+  const localId = String(formData.get("localId") ?? "");
+  if (!canAccessLocal(user, localId)) return { error: "Sin permiso." };
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Adjunta una imagen." };
+  if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) return { error: "Solo PNG, JPG, WEBP o GIF." };
+  if (file.size > 8 * 1024 * 1024) return { error: "La imagen supera 8 MB." };
+
+  const ext = path.extname(file.name) || ".img";
+  const storageKey = `${localId}/manual/${randomUUID()}${ext}`;
+  await saveFile(storageKey, Buffer.from(await file.arrayBuffer()));
+  const media = await prisma.manualMedia.create({
+    data: { localId, fileName: file.name, storageKey, mimeType: file.type, createdById: user.id },
+  });
+  await audit({ ...auditContext(user), localId, action: "manual.media.upload", entity: "ManualMedia", entityId: media.id });
+  return { url: `/api/manual/media/${media.id}` };
 }

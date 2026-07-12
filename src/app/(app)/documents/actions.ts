@@ -9,6 +9,8 @@ import { requireUser, requireRole, auditContext, clientIp } from "@/lib/auth";
 import { canAccessLocal } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 import { saveFile } from "@/lib/storage";
+import { getListScope } from "@/lib/localcontext";
+import { notify } from "@/lib/notify";
 
 const MAX_BYTES = 12 * 1024 * 1024;
 const ALLOWED = new Set(["application/pdf", "image/png", "image/jpeg"]);
@@ -60,6 +62,7 @@ export async function uploadDocument(
   });
 
   await audit({ ...auditContext(user), localId: emp.localId, action: "document.upload", entity: "Document", entityId: doc.id, detail: { type: d.type, employee: emp.id } });
+  await notify(emp.email, "Nuevo documento disponible", `Tienes un nuevo documento en MADRE: "${d.title}". Entra para verlo${d.requiresAck ? " y confirmar la recepción" : ""}.`);
   revalidatePath("/documents");
   return { ok: true };
 }
@@ -81,4 +84,48 @@ export async function acknowledgeDocument(documentId: string): Promise<{ error?:
   await audit({ ...auditContext(user), localId: doc.localId, action: "document.ack", entity: "Document", entityId: documentId });
   revalidatePath("/documents");
   return { ok: true };
+}
+
+// ── Nóminas en lote con asignación por NIF (spec §4.5) ──────────────────────
+
+const NIF_RE = /([XYZ]?\d{7,8}[A-Z])/i;
+
+export type BatchResult = { error?: string; summary?: { file: string; status: string }[] };
+
+export async function uploadPayslipsBatch(_prev: BatchResult, formData: FormData): Promise<BatchResult> {
+  const user = await requireRole("SUPERADMIN", "ENCARGADO", "GESTORIA");
+  const period = String(formData.get("period") ?? "").trim() || null;
+  const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) return { error: "Adjunta al menos un PDF." };
+
+  // Employees in scope, indexed by normalised NIF.
+  const scope = await getListScope(user);
+  const employees = await prisma.employee.findMany({ where: { ...scope, deletedAt: null, nif: { not: null } }, select: { id: true, localId: true, nif: true, email: true } });
+  const byNif = new Map(employees.map((e) => [e.nif!.replace(/[\s-]/g, "").toUpperCase(), e]));
+
+  const summary: { file: string; status: string }[] = [];
+  for (const file of files) {
+    if (file.type !== "application/pdf") { summary.push({ file: file.name, status: "omitido (no es PDF)" }); continue; }
+    if (file.size > MAX_BYTES) { summary.push({ file: file.name, status: "omitido (>12 MB)" }); continue; }
+    const m = file.name.toUpperCase().match(NIF_RE);
+    const emp = m ? byNif.get(m[1].toUpperCase()) : undefined;
+    if (!emp) { summary.push({ file: file.name, status: "sin coincidencia de NIF" }); continue; }
+
+    const storageKey = `${emp.localId}/${emp.id}/${randomUUID()}.pdf`;
+    await saveFile(storageKey, Buffer.from(await file.arrayBuffer()));
+    const doc = await prisma.document.create({
+      data: {
+        localId: emp.localId, employeeId: emp.id, type: "NOMINA",
+        title: `Nómina${period ? " " + period : ""}`, period,
+        fileName: file.name, storageKey, mimeType: "application/pdf", sizeBytes: file.size,
+        requiresAck: true, uploadedById: user.id,
+      },
+    });
+    await audit({ ...auditContext(user), localId: emp.localId, action: "document.upload.batch", entity: "Document", entityId: doc.id });
+    if (emp.email) await notify(emp.email, "Nueva nómina disponible", "Tienes una nueva nómina en MADRE. Entra para verla y confirmar la recepción.");
+    summary.push({ file: file.name, status: `asignada a ${emp.nif}` });
+  }
+
+  revalidatePath("/documents");
+  return { summary };
 }

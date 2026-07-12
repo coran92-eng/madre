@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { isAdmin } from "@/lib/rbac";
 import { getListScope } from "@/lib/localcontext";
 import { PageHeader, EmptyState, fmtDate } from "@/components/ui";
-import { UploadForm, AckButton } from "./DocumentsClient";
+import { UploadForm, BatchUploadForm, AckButton } from "./DocumentsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -46,8 +46,9 @@ async function AdminDocs({ user }: { user: Awaited<ReturnType<typeof requireUser
     <>
       <PageHeader title="Documentos" subtitle="Nóminas, contratos y comunicaciones" />
       {employees.length > 0 && (
-        <div className="mb-6">
+        <div className="mb-6 grid lg:grid-cols-2 gap-4">
           <UploadForm employees={employees.map((e) => ({ id: e.id, name: `${e.lastName}, ${e.firstName}` }))} />
+          <BatchUploadForm />
         </div>
       )}
       {documents.length === 0 ? (

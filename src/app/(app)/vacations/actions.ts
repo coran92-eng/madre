@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireUser, requireRole, auditContext } from "@/lib/auth";
 import { canAccessLocal } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
+import { notify } from "@/lib/notify";
 import {
   isoWeekRange,
   isoWeeksInYear,
@@ -131,6 +132,8 @@ export async function approveVacation(requestId: string): Promise<{ error?: stri
   }
 
   await audit({ ...auditContext(user), localId: req.localId, action: "vacation.approve", entity: "VacationRequest", entityId: requestId, detail: { weeks: req.weeks.map((w) => w.week) } });
+  const emp = await prisma.employee.findUnique({ where: { id: req.employeeId }, select: { email: true } });
+  await notify(emp?.email, "Vacaciones aprobadas", `Se han aprobado tus vacaciones (semanas ${req.weeks.map((w) => w.week).join(", ")}).`);
   revalidatePath("/vacations");
   revalidatePath("/vacations/approvals");
   return { ok: true };
@@ -151,6 +154,8 @@ export async function rejectVacation(requestId: string, note: string): Promise<{
     }),
   ]);
   await audit({ ...auditContext(user), localId: req.localId, action: "vacation.reject", entity: "VacationRequest", entityId: requestId, detail: { note } });
+  const emp = await prisma.employee.findUnique({ where: { id: req.employeeId }, select: { email: true } });
+  await notify(emp?.email, "Vacaciones rechazadas", `Tu solicitud de vacaciones ha sido rechazada.${note ? ` Motivo: ${note}` : ""}`);
   revalidatePath("/vacations/approvals");
   return { ok: true };
 }

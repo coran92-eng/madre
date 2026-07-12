@@ -300,6 +300,8 @@ model Shift {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  swaps ShiftSwap[]
+
   @@index([localId, date])
   @@index([employeeId, date])
 }
@@ -556,4 +558,62 @@ model CashClose {
   createdAt    DateTime @default(now())
 
   @@index([localId, businessDate])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FASE 3+ · extras
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Intercambio de turnos (spec §4.3): propuesta → aceptación compañero → visto bueno.
+enum SwapStatus {
+  PROPUESTO
+  ACEPTADO_COMPANERO
+  RECHAZADO_COMPANERO
+  APROBADO
+  RECHAZADO_ENCARGADO
+  CANCELADO
+}
+
+model ShiftSwap {
+  id               String     @id @default(cuid())
+  localId          String
+  shiftId          String
+  shift            Shift      @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  requestedById    String // employee que cede el turno
+  targetEmployeeId String // employee al que se le ofrece
+  status           SwapStatus @default(PROPUESTO)
+  note             String?
+  companionAt      DateTime?
+  decidedById      String?
+  decidedAt        DateTime?
+  createdAt        DateTime   @default(now())
+
+  @@index([localId, status])
+  @@index([targetEmployeeId, status])
+}
+
+// Plantillas de semana tipo (spec §4.3).
+model ScheduleTemplate {
+  id          String   @id @default(cuid())
+  localId     String
+  name        String
+  // data: [{ employeeId, weekday(0=Lun..6=Dom), startTime, endTime, note }]
+  data        Json
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([localId])
+}
+
+// Imágenes del manual (spec §4.6) — almacenadas en bucket privado.
+model ManualMedia {
+  id          String   @id @default(cuid())
+  localId     String
+  fileName    String
+  storageKey  String
+  mimeType    String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([localId])
 }

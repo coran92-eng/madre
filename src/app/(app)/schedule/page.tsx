@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { isAdmin } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui";
 import { getActiveLocalId } from "@/lib/localcontext";
-import { AddShiftForm, DeleteShift, PublishButton } from "./ScheduleClient";
+import { AddShiftForm, DeleteShift, PublishButton, TemplatesPanel } from "./ScheduleClient";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +65,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: { w
       })
     : [];
 
+  const templates = admin
+    ? await prisma.scheduleTemplate.findMany({ where: { localId }, orderBy: { createdAt: "desc" } })
+    : [];
+
   const unpublished = shifts.filter((s) => !s.published).length;
   const weekLabel = `${monday.getUTCDate()} ${MONTHS[monday.getUTCMonth()]} – ${sunday.getUTCDate()} ${MONTHS[sunday.getUTCMonth()]}`;
 
@@ -97,6 +101,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: { w
           <div className="flex justify-end">
             <PublishButton localId={localId} fromISO={monday.toISOString()} toISO={sunday.toISOString()} count={unpublished} />
           </div>
+          <TemplatesPanel
+            localId={localId}
+            weekISO={monday.toISOString()}
+            templates={templates.map((t) => ({ id: t.id, name: t.name, count: Array.isArray(t.data) ? (t.data as unknown[]).length : 0 }))}
+          />
         </div>
       )}
 

@@ -20,6 +20,7 @@ const ITEMS: Item[] = [
   { href: "/vacations", key: "nav.vacations", roles: STAFF },
   { href: "/absences", key: "nav.absences", roles: STAFF },
   { href: "/schedule", key: "nav.schedule", roles: STAFF },
+  { href: "/swaps", key: "nav.swaps", roles: STAFF },
   { href: "/timeclock", key: "nav.timeclock", roles: ["SUPERADMIN", "ENCARGADO", "EMPLEADO", "GESTORIA"] },
   { href: "/documents", key: "nav.documents", roles: ALL },
   { href: "/contratacion", key: "nav.contratacion", roles: ["SUPERADMIN", "ENCARGADO", "GESTORIA"] },

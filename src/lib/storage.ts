@@ -27,3 +27,12 @@ export async function saveFile(key: string, data: Buffer): Promise<void> {
 export async function readFile(key: string): Promise<Buffer> {
   return fs.readFile(resolveKey(key));
 }
+
+/** Best-effort delete (ARCO / retention purge). Never throws on missing file. */
+export async function deleteFile(key: string): Promise<void> {
+  try {
+    await fs.unlink(resolveKey(key));
+  } catch {
+    /* already gone */
+  }
+}

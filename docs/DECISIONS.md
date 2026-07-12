@@ -87,12 +87,33 @@ Pendiente en despliegue (no es código):
 - **Idiomas**: castellano / català con selector (`src/lib/i18n.ts`); navegación y
   chrome traducidos, cuerpos de página migrables por claves.
 
-**Pendiente / mejoras futuras**
-- Migración a Next 15 para cerrar avisos `npm audit` de DoS a nivel de framework
-  (los actuales requieren configuración de image-optimizer que no usamos).
-- Traducción completa al catalán de los cuerpos de página (mecanismo ya listo).
-- Manual con vídeo embebido y subida de imágenes al bucket privado.
-- Notificaciones push / email en más eventos (aprobaciones, nuevos documentos).
+**Extras completados (cierre funcional de la spec)**
+- **Intercambio de turnos** (§4.3): propuesta → aceptación del compañero → visto
+  bueno del encargado, con reasignación automática del cuadrante. En `/swaps`.
+- **Plantillas de semana tipo** (§4.3): guardar una semana y aplicarla a otra.
+- **Nóminas en lote por NIF** (§4.5): subida múltiple con asignación automática.
+- **Prioridad de conflictos de vacaciones** (§4.2): detección de solapamientos
+  pendientes y orden por regla (orden de solicitud / antigüedad).
+- **Notificaciones por email** en vacaciones, ausencias, documentos, publicación
+  de horarios y cambios de turno (vía el mailer conectable).
+- **Derechos ARCO** (§5): export JSON completo por empleado y borrado definitivo
+  (superadmin, solo sobre bajas, con purga de archivos).
+- **Manual con imágenes**: subida al bucket privado + inserción en Markdown.
+- **Migraciones Prisma** formales (baseline en `prisma/migrations/`, `db:migrate`).
+- **Tests** unitarios de la lógica pura (`vitest`: ISO week, fichaje, markdown, i18n).
+
+**Pendiente REAL (no es código de la app)**
+- **Infra de producción**: hosting bajo control de la propiedad, HTTPS, cifrado en
+  reposo, backups diarios + prueba de restauración, DPA art. 28, dominio, y
+  configurar `SMTP_URL` para el envío real de emails.
+- **Migración a Next 15** para cerrar los avisos residuales de `npm audit` (DoS a
+  nivel de framework; requieren configuración de image-optimizer que no usamos).
+- **Traducción completa al catalán** de los cuerpos de página (mecanismo listo;
+  hoy traducidos navegación y chrome).
+- **Sincronización offline avanzada** del fichaje (hoy: cola local + reintento).
+- **Decisiones de la propiedad** (§9): superadmin/gobernanza, días de vacaciones
+  (30 vs mejora), flujo de aprobación definitivo, tecnología de las apps actuales
+  de fichaje/caja, y cláusula de escrow.
 
 ## Notas de implementación
 

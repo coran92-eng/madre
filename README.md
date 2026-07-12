@@ -52,6 +52,21 @@ soft-delete para conservar el histórico 4 años.
 > **Fichaje offline:** las marcas se guardan en la tablet si no hay conexión y se
 > sincronizan al volver (el PIN se re-verifica en el servidor al sincronizar).
 
+**Cierre funcional (extras):**
+
+| Función | Estado |
+|---|---|
+| Intercambio de turnos: propuesta → aceptación → visto bueno (§4.3) | ✅ |
+| Plantillas de semana tipo (§4.3) | ✅ |
+| Nóminas en lote con asignación por NIF (§4.5) | ✅ |
+| Prioridad de conflictos de vacaciones (§4.2) | ✅ |
+| Notificaciones por email (vacaciones, ausencias, documentos, horarios, turnos) | ✅ |
+| Derechos ARCO: export JSON + borrado definitivo (§5) | ✅ |
+| Imágenes en el manual (bucket privado + Markdown) | ✅ |
+| Migraciones Prisma formales (`npm run db:migrate`) + tests (`npm test`) | ✅ |
+
+Lo único pendiente es **infra de producción** y **decisiones de la propiedad** — ver `docs/DECISIONS.md`.
+
 > **Fichaje (tablet):** ruta `/kiosk` sin login, protegida por PIN individual
 > (4-6 dígitos). El PIN se define desde la ficha del empleado. La tablet debe
 > estar online (sincronización offline queda para una iteración posterior).

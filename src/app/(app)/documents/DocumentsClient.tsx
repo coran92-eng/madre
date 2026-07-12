@@ -2,7 +2,44 @@
 
 import { useTransition } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { uploadDocument, acknowledgeDocument } from "./actions";
+import { uploadDocument, acknowledgeDocument, uploadPayslipsBatch } from "./actions";
+
+function BatchBtn() {
+  const { pending } = useFormStatus();
+  return <button className="btn-primary" disabled={pending}>{pending ? "Subiendo lote…" : "Subir lote de nóminas"}</button>;
+}
+
+export function BatchUploadForm() {
+  const [state, action] = useFormState(uploadPayslipsBatch, {});
+  return (
+    <form action={action} className="card p-4 space-y-3">
+      <h2 className="font-semibold">Nóminas en lote (asignación automática por NIF)</h2>
+      <p className="text-xs text-stone-500">Sube varios PDF a la vez; cada archivo se asigna al empleado cuyo NIF aparezca en el nombre del fichero.</p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label className="label">Periodo (opcional)</label>
+          <input name="period" className="input" placeholder="2026-07" />
+        </div>
+        <div>
+          <label className="label">Archivos PDF</label>
+          <input name="files" type="file" accept="application/pdf" multiple className="input" required />
+        </div>
+      </div>
+      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
+      {state.summary && (
+        <ul className="text-xs divide-y divide-stone-100 border rounded-md">
+          {state.summary.map((r, i) => (
+            <li key={i} className="px-2 py-1 flex justify-between">
+              <span className="truncate">{r.file}</span>
+              <span className={r.status.startsWith("asignada") ? "text-green-700" : "text-amber-600"}>{r.status}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <BatchBtn />
+    </form>
+  );
+}
 
 function UploadBtn() {
   const { pending } = useFormStatus();

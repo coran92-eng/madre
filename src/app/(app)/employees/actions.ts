@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireRole, auditContext, hashPassword, generatePassword } from "@/lib/auth";
+import { deleteFile } from "@/lib/storage";
 import { canAccessLocal } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 
@@ -231,4 +232,56 @@ export async function resolveExpiry(id: string): Promise<void> {
   await audit({ ...auditContext(user), localId: exp.localId, action: "expiry.resolve", entity: "Expiry", entityId: id });
   revalidatePath("/alerts");
   revalidatePath(`/employees/${exp.employeeId}`);
+}
+
+/**
+ * ARCO / retención (§5): borrado DEFINITIVO de un exempleado y todos sus datos,
+ * incluidos los archivos. Solo superadmin y solo sobre empleados ya dados de
+ * baja (para evitar borrados accidentales de personal activo). Irreversible.
+ */
+export async function purgeEmployee(id: string): Promise<void> {
+  const user = await requireRole("SUPERADMIN");
+  const emp = await prisma.employee.findUnique({
+    where: { id },
+    include: {
+      documents: { select: { storageKey: true } },
+      incidents: { select: { storageKey: true } },
+      absences: { select: { justStorageKey: true } },
+    },
+  });
+  if (!emp) throw new Error("Empleado no encontrado.");
+  if (!emp.deletedAt) throw new Error("Da de baja al empleado antes de borrarlo definitivamente.");
+
+  // Remove stored files first (best-effort).
+  const keys = [
+    ...emp.documents.map((d) => d.storageKey),
+    ...emp.incidents.map((i) => i.storageKey),
+    ...emp.absences.map((a) => a.justStorageKey),
+  ].filter((k): k is string => !!k);
+  for (const k of keys) await deleteFile(k);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.vacationAdjustment.deleteMany({ where: { employeeId: id } });
+    await tx.vacationRequest.deleteMany({ where: { employeeId: id } }); // cascades weeks
+    await tx.shift.deleteMany({ where: { employeeId: id } });
+    await tx.documentAck.deleteMany({ where: { employeeId: id } });
+    await tx.document.deleteMany({ where: { employeeId: id } });
+    await tx.timeEntry.deleteMany({ where: { employeeId: id } }); // cascades corrections
+    await tx.absence.deleteMany({ where: { employeeId: id } });
+    await tx.incident.deleteMany({ where: { employeeId: id } });
+    await tx.expiry.deleteMany({ where: { employeeId: id } });
+    await tx.manualRead.deleteMany({ where: { employeeId: id } });
+    await tx.announcementRead.deleteMany({ where: { employeeId: id } });
+    await tx.shiftSwap.deleteMany({ where: { OR: [{ requestedById: id }, { targetEmployeeId: id }] } });
+    const userId = emp.userId;
+    await tx.employee.delete({ where: { id } });
+    if (userId) {
+      await tx.session.deleteMany({ where: { userId } });
+      await tx.user.delete({ where: { id: userId } });
+    }
+  });
+
+  await audit({ ...auditContext(user), localId: emp.localId, action: "arco.purge", entity: "Employee", entityId: id, detail: { name: `${emp.firstName} ${emp.lastName}`, files: keys.length } });
+  revalidatePath("/employees");
+  redirect("/employees");
 }

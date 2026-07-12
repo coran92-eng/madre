@@ -6,7 +6,7 @@ import { canAccessLocal } from "@/lib/rbac";
 import { PageHeader, StatusBadge, fmtDate } from "@/components/ui";
 import EmployeeForm from "../EmployeeForm";
 import AccessPanel from "./AccessPanel";
-import { PinPanel, ExpiryPanel } from "./ExtraPanels";
+import { PinPanel, ExpiryPanel, PurgeButton } from "./ExtraPanels";
 import { IncidentForm, DeleteIncident } from "../../incidents/IncidentsClient";
 import { updateEmployee, deactivateEmployee, reactivateEmployee } from "../actions";
 
@@ -162,6 +162,18 @@ export default async function EmployeeDetail({ params }: { params: { id: string 
             <button className="btn-danger">Dar de baja</button>
           </form>
         )}
+      </div>
+
+      {/* Derechos ARCO (RGPD §5) */}
+      <div className="card p-4 mt-4">
+        <h2 className="font-semibold mb-1">Datos personales (RGPD / ARCO)</h2>
+        <p className="text-sm text-stone-500 mb-3">
+          Exporta todos los datos del empleado. El borrado definitivo solo procede tras cumplir los plazos legales de conservación (≥ 4 años).
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <a href={`/api/employees/${e.id}/arco`} className="btn-secondary" target="_blank">Exportar datos (JSON)</a>
+          {user.role === "SUPERADMIN" && e.deletedAt && <PurgeButton employeeId={e.id} />}
+        </div>
       </div>
     </>
   );

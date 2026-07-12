@@ -1,7 +1,24 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { setClockPin, addExpiry, resolveExpiry } from "../actions";
+import { setClockPin, addExpiry, resolveExpiry, purgeEmployee } from "../actions";
+
+export function PurgeButton({ employeeId }: { employeeId: string }) {
+  const [pending, start] = useTransition();
+  const [confirm, setConfirm] = useState(false);
+  if (!confirm) {
+    return <button className="btn-danger" onClick={() => setConfirm(true)}>Eliminar definitivamente (ARCO)</button>;
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-red-700">¿Seguro? Es irreversible.</span>
+      <button className="text-xs text-stone-500" onClick={() => setConfirm(false)}>Cancelar</button>
+      <button className="btn-danger text-xs px-2 py-1" disabled={pending} onClick={() => start(async () => { await purgeEmployee(employeeId); })}>
+        {pending ? "Borrando…" : "Sí, borrar todo"}
+      </button>
+    </div>
+  );
+}
 
 const EXPIRY_TYPES: [string, string][] = [
   ["CARNET_MANIPULADOR", "Carnet manipulador"],

@@ -1,8 +1,41 @@
 "use client";
 
-import { useTransition } from "react";
+import { useTransition, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { confirmRead, createSection, updateSection, deleteSection } from "./actions";
+import { confirmRead, createSection, updateSection, deleteSection, uploadManualImage } from "./actions";
+
+function ImageUploader({ localId, onInsert }: { localId: string; onInsert: (url: string) => void }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string>();
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <label className="btn-secondary text-xs px-2 py-1 cursor-pointer">
+        Subir imagen
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden"
+          disabled={pending}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const fd = new FormData();
+            fd.set("localId", localId);
+            fd.set("file", file);
+            start(async () => {
+              const r = await uploadManualImage(fd);
+              if (r.error) setError(r.error);
+              else if (r.url) { onInsert(r.url); setError(undefined); }
+            });
+            e.target.value = "";
+          }}
+        />
+      </label>
+      {pending && <span className="text-stone-400">subiendo…</span>}
+      {error && <span className="text-red-600">{error}</span>}
+    </div>
+  );
+}
 
 export function ConfirmReadButton({ sectionId, done }: { sectionId: string; done: boolean }) {
   const [pending, start] = useTransition();
@@ -24,6 +57,17 @@ type Section = { id: string; title: string; content: string; order: number; requ
 export function SectionForm({ localId, section }: { localId: string; section?: Section }) {
   const action = section ? updateSection.bind(null, section.id) : createSection;
   const [state, formAction] = useFormState(action, {});
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  function insertImage(url: string) {
+    const ta = contentRef.current;
+    if (!ta) return;
+    const snippet = `\n![imagen](${url})\n`;
+    const pos = ta.selectionStart ?? ta.value.length;
+    ta.value = ta.value.slice(0, pos) + snippet + ta.value.slice(pos);
+    ta.focus();
+  }
+
   return (
     <form action={formAction} className="card p-4 space-y-3">
       <input type="hidden" name="localId" value={localId} />
@@ -38,8 +82,11 @@ export function SectionForm({ localId, section }: { localId: string; section?: S
         </div>
       </div>
       <div>
-        <label className="label">Contenido</label>
-        <textarea name="content" className="input min-h-[160px] font-mono text-sm" defaultValue={section?.content} required />
+        <div className="flex items-center justify-between mb-1">
+          <label className="label mb-0">Contenido</label>
+          <ImageUploader localId={localId} onInsert={insertImage} />
+        </div>
+        <textarea ref={contentRef} name="content" className="input min-h-[160px] font-mono text-sm" defaultValue={section?.content} required />
         <p className="text-xs text-stone-400 mt-1">
           Admite Markdown: <code># título</code>, <code>**negrita**</code>, listas con <code>-</code>,
           enlaces <code>[texto](url)</code> e imágenes <code>![alt](url)</code>. Al cambiar el

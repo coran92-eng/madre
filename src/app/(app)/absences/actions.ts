@@ -9,6 +9,7 @@ import { requireUser, requireRole, auditContext } from "@/lib/auth";
 import { canAccessLocal } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 import { saveFile } from "@/lib/storage";
+import { notify } from "@/lib/notify";
 
 const MAX_BYTES = 12 * 1024 * 1024;
 const ALLOWED = new Set(["application/pdf", "image/png", "image/jpeg"]);
@@ -80,6 +81,8 @@ export async function decideAbsence(id: string, approve: boolean, note: string):
     data: { status: approve ? "APROBADA" : "RECHAZADA", decisionNote: note || null, decidedById: user.id, decidedAt: new Date() },
   });
   await audit({ ...auditContext(user), localId: abs.localId, action: approve ? "absence.approve" : "absence.reject", entity: "Absence", entityId: id });
+  const emp = await prisma.employee.findUnique({ where: { id: abs.employeeId }, select: { email: true } });
+  await notify(emp?.email, approve ? "Ausencia aprobada" : "Ausencia rechazada", approve ? "Tu solicitud de ausencia/permiso ha sido aprobada." : `Tu solicitud de ausencia ha sido rechazada.${note ? ` Motivo: ${note}` : ""}`);
   revalidatePath("/absences");
   return { ok: true };
 }
