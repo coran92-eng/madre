@@ -1,0 +1,343 @@
+// MADRE — data model
+// Non-negotiable principles baked in here (spec §2):
+//  1. Autogestión: everything is data, nothing hardcoded.
+//  2. Multi-local: every domain entity carries `localId`.
+//  3. Trazabilidad: AuditLog is append-only (no update/delete in app code).
+//  4. Conservación legal: soft-delete (deletedAt) so 4-year history is kept.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Core / access
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPERADMIN // propiedad: todo, todos los locales
+  ENCARGADO // su local
+  EMPLEADO // su información
+  GESTORIA // fase 2: nóminas + registro horario
+}
+
+model Local {
+  id        String   @id @default(cuid())
+  code      String   @unique // p.ej. "CDM"
+  name      String // "Corte de Manga"
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  employees     Employee[]
+  vacationYears VacationYear[]
+  blockedWeeks  BlockedWeek[]
+  shifts        Shift[]
+  documents     Document[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         Role
+  active       Boolean   @default(true)
+  localId      String? // null solo para SUPERADMIN (acceso a todos)
+  local        Local?    @relation(fields: [localId], references: [id])
+  employee     Employee?
+
+  // recuperación autónoma de contraseña (spec §3)
+  resetToken     String?   @unique
+  resetExpiresAt DateTime?
+  mustChangePassword Boolean @default(false)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  sessions  Session[]
+
+  @@index([localId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  ip        String?
+  userAgent String?
+
+  @@index([userId])
+}
+
+// Append-only. The app never updates or deletes rows here (spec §2.3).
+model AuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  actorId   String? // user who performed the action (null = system)
+  actorEmail String? // denormalised so the log survives user deletion
+  localId   String?
+  action    String // e.g. "vacation.approve"
+  entity    String // e.g. "VacationRequest"
+  entityId  String?
+  detail    Json? // structured before/after or context
+  ip        String?
+
+  @@index([entity, entityId])
+  @@index([localId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Employees (núcleo — spec §4.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EmployeeStatus {
+  ACTIVO
+  BAJA
+  EXCEDENCIA
+}
+
+enum ContractType {
+  INDEFINIDO
+  TEMPORAL
+  FIJO_DISCONTINUO
+  FORMACION
+  PRACTICAS
+}
+
+model Employee {
+  id     String @id @default(cuid())
+  localId String
+  local  Local  @relation(fields: [localId], references: [id])
+
+  // 1:1 login. Nullable so an employee record can exist before access is provisioned.
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  // Datos personales
+  firstName String
+  lastName  String
+  nif       String? // NIF/NIE
+  ssNumber  String? // nº Seguridad Social
+  iban      String?
+  phone     String?
+  email     String?
+  emergencyContact String?
+  emergencyPhone   String?
+
+  // Contrato
+  contractType     ContractType   @default(INDEFINIDO)
+  weeklyHours      Float          @default(40) // jornada
+  startDate        DateTime
+  endDate          DateTime? // fin de contrato temporal
+  status           EmployeeStatus @default(ACTIVO)
+
+  // Vacaciones: por defecto hereda del año configurado; puede overridearse por empleado.
+  vacationDaysOverride Int?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete (baja) — histórico conservado 4 años
+
+  vacationRequests   VacationRequest[]
+  vacationAdjustments VacationAdjustment[]
+  shifts             Shift[]
+  documents          Document[]
+  documentAcks       DocumentAck[]
+
+  @@index([localId, deletedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vacaciones (motor de reglas — spec §4.2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PriorityRule {
+  ORDEN_SOLICITUD // orden de llegada
+  ANTIGUEDAD // fecha de alta más antigua
+  ROTACION // rotación anual (informativo)
+}
+
+// Configuración anual por local. El validador de capacidad usa estos números.
+model VacationYear {
+  id      String @id @default(cuid())
+  localId String
+  local   Local  @relation(fields: [localId], references: [id])
+  year    Int
+
+  daysPerEmployee  Int          @default(30) // 30 naturales según Convenio Hostelería CAT
+  weeksPerEmployee Int          @default(5) // semanas completas asignables por persona
+  accrualPerMonth  Float        @default(2.5) // devengo días naturales/mes
+  priorityRule     PriorityRule @default(ORDEN_SOLICITUD)
+  requestsOpen     Boolean      @default(false) // el admin abre solicitudes tras validar capacidad
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([localId, year])
+}
+
+// Semanas bloqueadas (temporada alta). Configurables por año — nunca hardcode.
+model BlockedWeek {
+  id      String @id @default(cuid())
+  localId String
+  local   Local  @relation(fields: [localId], references: [id])
+  year    Int
+  week    Int // número de semana ISO (1..53)
+  reason  String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([localId, year, week])
+  @@index([localId, year])
+}
+
+enum VacationStatus {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+  CANCELADA
+}
+
+model VacationRequest {
+  id         String   @id @default(cuid())
+  localId    String
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  year       Int
+
+  status       VacationStatus @default(PENDIENTE)
+  decisionNote String? // motivo de rechazo
+  decidedById  String?
+  decidedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  weeks VacationWeek[]
+
+  @@index([localId, year, status])
+  @@index([employeeId])
+}
+
+model VacationWeek {
+  id        String          @id @default(cuid())
+  requestId String
+  request   VacationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  localId   String
+  year      Int
+  week      Int // semana ISO
+  startDate DateTime
+  endDate   DateTime
+
+  // Regla anti-solapamiento ABSOLUTA: una semana ISO aprobada es única por local+año.
+  // El índice único se aplica solo a semanas de solicitudes APROBADAS mediante una
+  // columna espejo `approvedKey` (ver lógica en lib/vacations). Aquí guardamos todas.
+  approvedKey String? @unique // = `${localId}:${year}:${week}` cuando la solicitud está aprobada
+
+  @@index([localId, year, week])
+}
+
+// Bolsa de días: ajustes manuales (festivos trabajados, días pendientes de devolución).
+enum AdjustmentStatus {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
+model VacationAdjustment {
+  id         String   @id @default(cuid())
+  localId    String
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  year       Int
+  days       Float // positivo = días a favor del empleado
+  reason     String
+  desiredDate DateTime?
+  status     AdjustmentStatus @default(PENDIENTE)
+  decidedById String?
+  decidedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId, year])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Horarios (spec §4.3) — MVP: cuadrante por empleado/día
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Shift {
+  id         String   @id @default(cuid())
+  localId    String
+  local      Local    @relation(fields: [localId], references: [id])
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  date      DateTime // día del turno (00:00)
+  startTime String // "HH:mm"
+  endTime   String // "HH:mm"
+  note      String?
+  published Boolean  @default(false)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([localId, date])
+  @@index([employeeId, date])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Documentos (spec §4.5) — repositorio + confirmación de recepción
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum DocumentType {
+  NOMINA
+  CONTRATO
+  ANEXO
+  AMONESTACION
+  COMUNICACION
+  OTRO
+}
+
+model Document {
+  id         String       @id @default(cuid())
+  localId    String
+  local      Local        @relation(fields: [localId], references: [id])
+  employeeId String
+  employee   Employee     @relation(fields: [employeeId], references: [id])
+  type       DocumentType
+  title      String
+  period     String? // p.ej. "2026-07" para nóminas
+  fileName   String
+  storageKey String // ruta en STORAGE_DIR / bucket
+  mimeType   String
+  sizeBytes  Int
+  requiresAck Boolean     @default(true)
+
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  acks DocumentAck[]
+
+  @@index([localId, employeeId])
+}
+
+// Firma digital simple: clic + fecha/hora/IP (spec §4.5)
+model DocumentAck {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  ackedAt    DateTime @default(now())
+  ip         String?
+
+  @@unique([documentId, employeeId])
+}

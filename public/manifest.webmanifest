@@ -1,0 +1,17 @@
+{
+  "name": "MADRE — Gestión de personal",
+  "short_name": "MADRE",
+  "description": "Plataforma de gestión de personal · Corte de Manga",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#3d0f0f",
+  "theme_color": "#7c1d1d",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
