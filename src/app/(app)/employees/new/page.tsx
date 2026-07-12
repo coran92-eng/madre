@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { localScope } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui";
 import EmployeeForm from "../EmployeeForm";
 import { createEmployee } from "../actions";

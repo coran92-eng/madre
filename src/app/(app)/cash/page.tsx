@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { localScope } from "@/lib/rbac";
+import { getListScope } from "@/lib/localcontext";
 import { PageHeader, EmptyState, fmtDate } from "@/components/ui";
 import CashForm from "./CashForm";
 
@@ -13,7 +13,7 @@ export default async function CashPage() {
   const locals = await prisma.local.findMany({ orderBy: { name: "asc" } });
 
   const closes = await prisma.cashClose.findMany({
-    where: { ...localScope(user) },
+    where: { ...(await getListScope(user)) },
     orderBy: { businessDate: "desc" },
     take: 60,
   });

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { isAdmin, localScope } from "@/lib/rbac";
+import { isAdmin } from "@/lib/rbac";
+import { getListScope } from "@/lib/localcontext";
 import { PageHeader, Stat, EmptyState } from "@/components/ui";
 import {
   parseMonthKey, monthRange, monthLabel, shiftMonthKey,
@@ -24,7 +25,7 @@ export default async function TimeclockPage({ searchParams }: { searchParams: { 
   const entries = await prisma.timeEntry.findMany({
     where: {
       clockIn: { gte: start, lt: end },
-      ...(admin ? localScope(user) : { employeeId: employee?.id ?? "__none__" }),
+      ...(admin ? await getListScope(user) : { employeeId: employee?.id ?? "__none__" }),
     },
     include: {
       employee: { select: { id: true, firstName: true, lastName: true, weeklyHours: true } },
@@ -35,7 +36,7 @@ export default async function TimeclockPage({ searchParams }: { searchParams: { 
 
   // Planned minutes this month (from published shifts) → banco de horas.
   const shifts = await prisma.shift.findMany({
-    where: { date: { gte: start, lt: end }, ...(admin ? localScope(user) : { employeeId: employee?.id ?? "__none__" }) },
+    where: { date: { gte: start, lt: end }, ...(admin ? await getListScope(user) : { employeeId: employee?.id ?? "__none__" }) },
     select: { employeeId: true, startTime: true, endTime: true },
   });
   const plannedByEmp = new Map<string, number>();

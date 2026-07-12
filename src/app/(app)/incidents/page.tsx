@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { localScope } from "@/lib/rbac";
+import { getListScope } from "@/lib/localcontext";
 import { PageHeader, EmptyState, fmtDate } from "@/components/ui";
 import { IncidentForm, DeleteIncident } from "./IncidentsClient";
 
@@ -11,13 +11,13 @@ export default async function IncidentsPage() {
 
   const [incidents, employees] = await Promise.all([
     prisma.incident.findMany({
-      where: { ...localScope(user) },
+      where: { ...(await getListScope(user)) },
       include: { employee: { select: { firstName: true, lastName: true } } },
       orderBy: { date: "desc" },
       take: 100,
     }),
     prisma.employee.findMany({
-      where: { ...localScope(user), deletedAt: null },
+      where: { ...(await getListScope(user)), deletedAt: null },
       orderBy: { lastName: "asc" },
       select: { id: true, firstName: true, lastName: true },
     }),

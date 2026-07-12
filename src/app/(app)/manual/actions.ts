@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser, requireRole, auditContext, clientIp } from "@/lib/auth";
-import { canAccessLocal, localScope } from "@/lib/rbac";
+import { canAccessLocal } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 
 function slugify(s: string): string {

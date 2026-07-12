@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isAdmin } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui";
+import { getActiveLocalId } from "@/lib/localcontext";
 import { AddShiftForm, DeleteShift, PublishButton } from "./ScheduleClient";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +33,7 @@ function minutes(t: string): number {
 
 export default async function SchedulePage({ searchParams }: { searchParams: { week?: string } }) {
   const user = await requireUser();
-  const localId =
-    user.localId ?? (await prisma.local.findFirst({ orderBy: { createdAt: "asc" } }))?.id ?? null;
+  const localId = await getActiveLocalId(user);
   if (!localId) return <p>No hay locales configurados.</p>;
 
   const base = searchParams.week ? new Date(searchParams.week + "T00:00:00Z") : new Date();

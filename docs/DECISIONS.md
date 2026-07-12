@@ -71,12 +71,28 @@ Pendiente en despliegue (no es código):
    tablón de anuncios, registro de incidencias, gestión de usuarios/admins y
    recuperación de contraseña autónoma (token 1 h; envío por *mailer* conectable).
 
-**Fase 3 — pendiente**
-- Activación multi-local real (Sastrería BCN y Madrid) — el modelo ya lo soporta
-- Acceso completo de gestoría (descarga de registro horario y contratación)
-- Sincronización offline del fichaje; envío real de emails (SMTP UE)
-- Manual con imágenes/vídeo embebido (hoy: texto enriquecido con saltos de línea)
-- ¿Catalán como segundo idioma?
+**Fase 3 — completada**
+- **Multi-local activo**: alta/edición de locales (`/locals`) y selector de local
+  para superadmin que scopea todas las vistas (empleados, vacaciones, horarios,
+  documentos, fichajes, etc.). Empleados/encargados quedan fijados a su local.
+- **Acceso de gestoría**: subida de nóminas + descarga CSV de datos de
+  contratación (`/api/employees/export`) y registro horario (`/api/timeclock/export`).
+- **Email real**: `src/lib/mailer.ts` usa nodemailer cuando `SMTP_URL` está
+  definido (proveedor UE); si no, registra en consola (dev).
+- **Fichaje offline**: cola en `localStorage` con marca de tiempo, reintento al
+  reconectar (el PIN se re-verifica en el servidor) y service worker (`public/sw.js`)
+  para cargar el shell del kiosko sin conexión.
+- **Manual enriquecido**: renderizador Markdown seguro (escapa HTML y reintroduce
+  solo etiquetas conocidas) con títulos, listas, enlaces e imágenes.
+- **Idiomas**: castellano / català con selector (`src/lib/i18n.ts`); navegación y
+  chrome traducidos, cuerpos de página migrables por claves.
+
+**Pendiente / mejoras futuras**
+- Migración a Next 15 para cerrar avisos `npm audit` de DoS a nivel de framework
+  (los actuales requieren configuración de image-optimizer que no usamos).
+- Traducción completa al catalán de los cuerpos de página (mecanismo ya listo).
+- Manual con vídeo embebido y subida de imágenes al bucket privado.
+- Notificaciones push / email en más eventos (aprobaciones, nuevos documentos).
 
 ## Notas de implementación
 

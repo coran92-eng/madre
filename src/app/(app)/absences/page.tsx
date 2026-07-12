@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { isAdmin, localScope } from "@/lib/rbac";
+import { isAdmin } from "@/lib/rbac";
+import { getListScope } from "@/lib/localcontext";
 import { PageHeader, StatusBadge, EmptyState, fmtDate } from "@/components/ui";
 import { RequestForm, DecisionButtons, CancelButton } from "./AbsencesClient";
 
@@ -28,12 +29,12 @@ export default async function AbsencesPage() {
 async function AdminView({ user }: { user: Awaited<ReturnType<typeof requireUser>> }) {
   const [pending, decided] = await Promise.all([
     prisma.absence.findMany({
-      where: { ...localScope(user), status: "PENDIENTE" },
+      where: { ...(await getListScope(user)), status: "PENDIENTE" },
       include: { employee: { select: { firstName: true, lastName: true } } },
       orderBy: { createdAt: "asc" },
     }),
     prisma.absence.findMany({
-      where: { ...localScope(user), status: { not: "PENDIENTE" } },
+      where: { ...(await getListScope(user)), status: { not: "PENDIENTE" } },
       include: { employee: { select: { firstName: true, lastName: true } } },
       orderBy: { createdAt: "desc" },
       take: 30,

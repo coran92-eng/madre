@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isAdmin } from "@/lib/rbac";
 import { weekAvailability, getVacationYear, employeeBalance, capacityCheck } from "@/lib/vacations";
+import { getActiveLocalId } from "@/lib/localcontext";
 import { PageHeader, Stat, StatusBadge, fmtDate } from "@/components/ui";
 import WeekCalendar from "./WeekCalendar";
 import { CancelButton } from "./MyRequests";
@@ -14,9 +15,8 @@ export default async function VacationsPage({ searchParams }: { searchParams: { 
   const user = await requireUser();
   const year = Number(searchParams.year) || new Date().getUTCFullYear();
 
-  // Resolve viewing local.
-  const localId =
-    user.localId ?? (await prisma.local.findFirst({ orderBy: { createdAt: "asc" } }))?.id ?? null;
+  // Resolve viewing local (superadmin: from the local switcher).
+  const localId = await getActiveLocalId(user);
   if (!localId) return <p>No hay locales configurados.</p>;
 
   const cfg = await getVacationYear(localId, year);

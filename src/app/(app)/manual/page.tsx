@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isAdmin } from "@/lib/rbac";
+import { getActiveLocalId } from "@/lib/localcontext";
+import { renderMarkdown } from "@/lib/markdown";
 import { PageHeader, EmptyState } from "@/components/ui";
 import { ConfirmReadButton } from "./ManualClient";
 
@@ -10,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function ManualPage() {
   const user = await requireUser();
   const admin = isAdmin(user);
-  const localId = user.localId ?? (await prisma.local.findFirst({ orderBy: { createdAt: "asc" } }))?.id ?? null;
+  const localId = await getActiveLocalId(user);
   if (!localId) return <p>No hay locales configurados.</p>;
 
   const employee = admin ? null : await prisma.employee.findUnique({ where: { userId: user.id } });
@@ -59,7 +61,7 @@ export default async function ManualPage() {
                     </div>
                   )}
                 </div>
-                <div className="mt-2 text-stone-700 whitespace-pre-wrap text-sm leading-relaxed">{s.content}</div>
+                <div className="mt-2 text-stone-700 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: renderMarkdown(s.content) }} />
                 <div className="mt-2 text-xs text-stone-400">Versión {s.version}</div>
               </article>
             );

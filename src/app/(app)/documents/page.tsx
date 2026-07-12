@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { isAdmin, localScope } from "@/lib/rbac";
+import { isAdmin } from "@/lib/rbac";
+import { getListScope } from "@/lib/localcontext";
 import { PageHeader, EmptyState, fmtDate } from "@/components/ui";
 import { UploadForm, AckButton } from "./DocumentsClient";
 
@@ -26,7 +27,7 @@ export default async function DocumentsPage() {
 async function AdminDocs({ user }: { user: Awaited<ReturnType<typeof requireUser>> }) {
   const [documents, employees] = await Promise.all([
     prisma.document.findMany({
-      where: { ...localScope(user) },
+      where: { ...(await getListScope(user)) },
       include: {
         employee: { select: { firstName: true, lastName: true } },
         acks: { select: { ackedAt: true } },
@@ -35,7 +36,7 @@ async function AdminDocs({ user }: { user: Awaited<ReturnType<typeof requireUser
       take: 100,
     }),
     prisma.employee.findMany({
-      where: { ...localScope(user), deletedAt: null },
+      where: { ...(await getListScope(user)), deletedAt: null },
       orderBy: { lastName: "asc" },
       select: { id: true, firstName: true, lastName: true },
     }),

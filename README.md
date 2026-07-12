@@ -32,7 +32,25 @@ soft-delete para conservar el histórico 4 años.
 | Cierre de caja (módulo interno + histórico) | ✅ |
 | Gestión de usuarios/admins (superadmin) + recuperación de contraseña | ✅ |
 
-Fase 3 (multi-local activo, acceso completo gestoría, catalán): ver `docs/DECISIONS.md`.
+**Fase 3 — completada:**
+
+| Módulo | Estado |
+|---|---|
+| Multi-local activo: alta/edición de locales + selector de local para superadmin (scopea todas las vistas) | ✅ |
+| Acceso de gestoría: subida de nóminas + export CSV de contratación y registro horario | ✅ |
+| Email real (SMTP UE vía nodemailer, con fallback a consola en dev) | ✅ |
+| Fichaje offline: cola local + reintento al reconectar + service worker | ✅ |
+| Manual con texto enriquecido (Markdown seguro: títulos, listas, enlaces, imágenes) | ✅ |
+| Idiomas: castellano / català con selector | ✅ |
+
+> **Multi-local:** el superadmin usa el selector de la barra lateral para trabajar
+> sobre un local concreto o «Todos». Empleados/encargados quedan fijados a su local.
+>
+> **i18n:** la navegación y el chrome están traducidos (es/ca); los cuerpos de
+> página continúan en castellano y se migran por claves (`src/lib/i18n.ts`).
+>
+> **Fichaje offline:** las marcas se guardan en la tablet si no hay conexión y se
+> sincronizan al volver (el PIN se re-verifica en el servidor al sincronizar).
 
 > **Fichaje (tablet):** ruta `/kiosk` sin login, protegida por PIN individual
 > (4-6 dígitos). El PIN se define desde la ficha del empleado. La tablet debe

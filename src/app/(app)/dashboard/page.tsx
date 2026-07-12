@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { isAdmin, localScope, ROLE_LABELS } from "@/lib/rbac";
+import { isAdmin, ROLE_LABELS } from "@/lib/rbac";
 import { capacityCheck, employeeBalance } from "@/lib/vacations";
+import { getActiveLocalId, getListScope } from "@/lib/localcontext";
 import { gatherAlerts } from "@/lib/alerts";
 import { PageHeader, Stat } from "@/components/ui";
 
@@ -16,15 +17,19 @@ export default async function Dashboard() {
         title={`Hola`}
         subtitle={`${user.email} · ${ROLE_LABELS[user.role]}`}
       />
-      {isAdmin(user) ? <AdminHome user={user} year={year} /> : <EmployeeHome userId={user.id} year={year} />}
+      {isAdmin(user) ? (
+        <AdminHome user={user} year={year} />
+      ) : user.role === "GESTORIA" ? (
+        <GestoriaHome />
+      ) : (
+        <EmployeeHome userId={user.id} year={year} />
+      )}
     </>
   );
 }
 
 async function AdminHome({ user, year }: { user: Awaited<ReturnType<typeof requireUser>>; year: number }) {
-  const isSuper = user.role === "SUPERADMIN";
-  const userLocalId = user.localId;
-  const scope = isSuper ? {} : { localId: userLocalId ?? "__none__" };
+  const scope = await getListScope(user);
   const [employees, pendingVac, pendingDocs, pendingAbs, alerts] = await Promise.all([
     prisma.employee.count({ where: { ...scope, deletedAt: null } }),
     prisma.vacationRequest.count({ where: { ...scope, status: "PENDIENTE" } }),
@@ -33,8 +38,9 @@ async function AdminHome({ user, year }: { user: Awaited<ReturnType<typeof requi
     gatherAlerts(user, 30),
   ]);
 
-  // Capacity report for the admin's local (superadmin: skip, multi-local).
-  const capacity = userLocalId ? await capacityCheck(userLocalId, year) : null;
+  // Capacity report for the active local (multi-local via switcher).
+  const activeLocalId = await getActiveLocalId(user);
+  const capacity = activeLocalId ? await capacityCheck(activeLocalId, year) : null;
 
   return (
     <div className="space-y-6">
@@ -101,6 +107,18 @@ async function EmployeeHome({ userId, year }: { userId: string; year: number }) 
         <QuickLink href="/vacations" title="Mis vacaciones" desc="Solicitar semanas y ver el calendario compartido." />
         <QuickLink href="/schedule" title="Mi horario" desc="Tus turnos publicados." />
         <QuickLink href="/documents" title="Mis documentos" desc="Nóminas y contratos. Confirma recepción." />
+      </div>
+    </div>
+  );
+}
+
+function GestoriaHome() {
+  return (
+    <div className="space-y-6">
+      <p className="text-stone-600">Acceso de gestoría: subida de nóminas y descarga de registro horario y datos de contratación.</p>
+      <div className="grid md:grid-cols-2 gap-4">
+        <QuickLink href="/contratacion" title="Contratación" desc="Descargar datos de contratación y registro horario (CSV)." />
+        <QuickLink href="/documents" title="Documentos" desc="Subir nóminas y contratos." />
       </div>
     </div>
   );

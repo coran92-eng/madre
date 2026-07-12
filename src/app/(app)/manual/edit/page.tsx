@@ -2,13 +2,14 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
+import { getActiveLocalId } from "@/lib/localcontext";
 import { SectionForm } from "../ManualClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function ManualEditPage() {
   const user = await requireRole("SUPERADMIN", "ENCARGADO");
-  const localId = user.localId ?? (await prisma.local.findFirst({ orderBy: { createdAt: "asc" } }))?.id ?? null;
+  const localId = await getActiveLocalId(user);
   if (!localId) return <p>No hay locales configurados.</p>;
 
   const sections = await prisma.manualSection.findMany({

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { localScope } from "@/lib/rbac";
+import { getListScope } from "@/lib/localcontext";
 import { PageHeader, StatusBadge, EmptyState, fmtDate } from "@/components/ui";
 
 export default async function EmployeesPage({
@@ -12,8 +12,9 @@ export default async function EmployeesPage({
   const user = await requireRole("SUPERADMIN", "ENCARGADO");
   const showHistoric = searchParams.historico === "1";
 
+  const scope = await getListScope(user);
   const employees = await prisma.employee.findMany({
-    where: { ...localScope(user), deletedAt: showHistoric ? { not: null } : null },
+    where: { ...scope, deletedAt: showHistoric ? { not: null } : null },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: { local: true, user: { select: { id: true } } },
   });

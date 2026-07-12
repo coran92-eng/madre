@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import type { SessionUser } from "./auth";
-import { localScope } from "./rbac";
+import { getListScope } from "./localcontext";
 
 export type Alert = {
   employeeId: string;
@@ -32,7 +32,7 @@ function daysBetween(a: Date, b: Date): number {
  * Expiry entries with contract-end and trial-period dates derived from employees.
  */
 export async function gatherAlerts(user: SessionUser, leadDays = 30): Promise<Alert[]> {
-  const scope = localScope(user);
+  const scope = await getListScope(user);
   const now = new Date();
   const horizon = new Date(now.getTime() + leadDays * 86400000);
 

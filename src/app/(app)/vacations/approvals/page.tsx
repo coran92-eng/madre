@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { localScope } from "@/lib/rbac";
+import { getListScope } from "@/lib/localcontext";
 import { PageHeader, EmptyState, fmtDate } from "@/components/ui";
 import { VacationDecision, AdjustmentDecision } from "./ApprovalActions";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ApprovalsPage() {
   const user = await requireRole("SUPERADMIN", "ENCARGADO");
-  const scope = localScope(user);
+  const scope = await getListScope(user);
 
   const [requests, adjustments] = await Promise.all([
     prisma.vacationRequest.findMany({

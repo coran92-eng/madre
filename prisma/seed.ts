@@ -46,6 +46,10 @@ async function main() {
     create: { code: "CDM", name: "Corte de Manga" },
   });
 
+  // Fase 3: multi-local. Los otros dos locales del grupo (arrancan vacíos).
+  await prisma.local.upsert({ where: { code: "SBCN" }, update: {}, create: { code: "SBCN", name: "La Sastrería Barcelona" } });
+  await prisma.local.upsert({ where: { code: "SMAD" }, update: {}, create: { code: "SMAD", name: "La Sastrería Madrid" } });
+
   await prisma.vacationYear.upsert({
     where: { localId_year: { localId: local.id, year: YEAR } },
     update: { requestsOpen: true },

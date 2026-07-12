@@ -40,7 +40,11 @@ export function SectionForm({ localId, section }: { localId: string; section?: S
       <div>
         <label className="label">Contenido</label>
         <textarea name="content" className="input min-h-[160px] font-mono text-sm" defaultValue={section?.content} required />
-        <p className="text-xs text-stone-400 mt-1">Texto plano con saltos de línea. Al cambiar el contenido se sube la versión y se pedirá relectura.</p>
+        <p className="text-xs text-stone-400 mt-1">
+          Admite Markdown: <code># título</code>, <code>**negrita**</code>, listas con <code>-</code>,
+          enlaces <code>[texto](url)</code> e imágenes <code>![alt](url)</code>. Al cambiar el
+          contenido se sube la versión y se pedirá relectura.
+        </p>
       </div>
       <label className="flex items-center gap-2 text-sm">
         <input name="requiresReadConfirm" type="checkbox" defaultChecked={section?.requiresReadConfirm ?? true} />
