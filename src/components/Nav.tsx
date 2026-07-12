@@ -7,12 +7,24 @@ import { logout } from "@/app/(app)/actions";
 
 type Item = { href: string; label: string; roles: Role[] };
 
+const ALL: Role[] = ["SUPERADMIN", "ENCARGADO", "EMPLEADO", "GESTORIA"];
+const STAFF: Role[] = ["SUPERADMIN", "ENCARGADO", "EMPLEADO"];
+const ADMIN: Role[] = ["SUPERADMIN", "ENCARGADO"];
+
 const ITEMS: Item[] = [
-  { href: "/dashboard", label: "Inicio", roles: ["SUPERADMIN", "ENCARGADO", "EMPLEADO", "GESTORIA"] },
-  { href: "/employees", label: "Empleados", roles: ["SUPERADMIN", "ENCARGADO"] },
-  { href: "/vacations", label: "Vacaciones", roles: ["SUPERADMIN", "ENCARGADO", "EMPLEADO"] },
-  { href: "/schedule", label: "Horarios", roles: ["SUPERADMIN", "ENCARGADO", "EMPLEADO"] },
-  { href: "/documents", label: "Documentos", roles: ["SUPERADMIN", "ENCARGADO", "EMPLEADO", "GESTORIA"] },
+  { href: "/dashboard", label: "Inicio", roles: ALL },
+  { href: "/employees", label: "Empleados", roles: ADMIN },
+  { href: "/vacations", label: "Vacaciones", roles: STAFF },
+  { href: "/absences", label: "Ausencias", roles: STAFF },
+  { href: "/schedule", label: "Horarios", roles: STAFF },
+  { href: "/timeclock", label: "Fichajes", roles: ["SUPERADMIN", "ENCARGADO", "EMPLEADO", "GESTORIA"] },
+  { href: "/documents", label: "Documentos", roles: ALL },
+  { href: "/manual", label: "Manual", roles: STAFF },
+  { href: "/board", label: "Tablón", roles: ALL },
+  { href: "/cash", label: "Caja", roles: ADMIN },
+  { href: "/alerts", label: "Alertas", roles: ADMIN },
+  { href: "/incidents", label: "Incidencias", roles: ADMIN },
+  { href: "/users", label: "Usuarios", roles: ["SUPERADMIN"] },
   { href: "/audit", label: "Actividad", roles: ["SUPERADMIN"] },
 ];
 

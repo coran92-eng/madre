@@ -20,6 +20,7 @@ type Employee = {
   weeklyHours: number;
   startDate: string; // yyyy-mm-dd
   endDate: string | null;
+  trialEndDate: string | null;
   status: string;
   vacationDaysOverride: number | null;
 };
@@ -98,6 +99,7 @@ export default function EmployeeForm({
           <Field name="weeklyHours" label="Jornada (h/semana)" type="number" step="0.5" defaultValue={e ? String(e.weeklyHours) : "40"} />
           <Field name="startDate" label="Fecha de alta" type="date" defaultValue={e?.startDate} required />
           <Field name="endDate" label="Fin de contrato (opcional)" type="date" defaultValue={e?.endDate ?? ""} />
+          <Field name="trialEndDate" label="Fin período de prueba (opcional)" type="date" defaultValue={e?.trialEndDate ?? ""} />
           <div>
             <label className="label" htmlFor="status">Estado</label>
             <select id="status" name="status" className="input" defaultValue={e?.status ?? "ACTIVO"}>

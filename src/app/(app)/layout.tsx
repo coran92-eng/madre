@@ -18,7 +18,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="md:flex min-h-screen">
       <Nav role={user.role} email={user.email} localName={localName} />
-      <main className="flex-1 p-4 md:p-8 max-w-5xl w-full mx-auto">{children}</main>
+      <main className="flex-1 p-4 md:p-8 max-w-5xl w-full mx-auto">
+        {user.mustChangePassword && (
+          <div className="mb-6 rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+            Estás usando una contraseña temporal.{" "}
+            <a href="/account" className="underline font-medium">Cámbiala ahora</a> por seguridad.
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

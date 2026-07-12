@@ -89,7 +89,7 @@ export async function destroySession(): Promise<void> {
   cookies().delete(COOKIE);
 }
 
-export type SessionUser = Pick<User, "id" | "email" | "role" | "localId" | "active">;
+export type SessionUser = Pick<User, "id" | "email" | "role" | "localId" | "active" | "mustChangePassword">;
 
 /** Returns the current user or null. Clears expired/invalid sessions. */
 export async function getCurrentUser(): Promise<SessionUser | null> {
@@ -111,6 +111,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     role: user.role,
     localId: user.localId,
     active: user.active,
+    mustChangePassword: user.mustChangePassword,
   };
 }
 

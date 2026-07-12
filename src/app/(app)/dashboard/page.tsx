@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isAdmin, localScope, ROLE_LABELS } from "@/lib/rbac";
 import { capacityCheck, employeeBalance } from "@/lib/vacations";
+import { gatherAlerts } from "@/lib/alerts";
 import { PageHeader, Stat } from "@/components/ui";
 
 export default async function Dashboard() {
@@ -15,17 +16,21 @@ export default async function Dashboard() {
         title={`Hola`}
         subtitle={`${user.email} · ${ROLE_LABELS[user.role]}`}
       />
-      {isAdmin(user) ? <AdminHome userLocalId={user.localId} year={year} isSuper={user.role === "SUPERADMIN"} /> : <EmployeeHome userId={user.id} year={year} />}
+      {isAdmin(user) ? <AdminHome user={user} year={year} /> : <EmployeeHome userId={user.id} year={year} />}
     </>
   );
 }
 
-async function AdminHome({ userLocalId, year, isSuper }: { userLocalId: string | null; year: number; isSuper: boolean }) {
+async function AdminHome({ user, year }: { user: Awaited<ReturnType<typeof requireUser>>; year: number }) {
+  const isSuper = user.role === "SUPERADMIN";
+  const userLocalId = user.localId;
   const scope = isSuper ? {} : { localId: userLocalId ?? "__none__" };
-  const [employees, pendingVac, pendingDocs] = await Promise.all([
+  const [employees, pendingVac, pendingDocs, pendingAbs, alerts] = await Promise.all([
     prisma.employee.count({ where: { ...scope, deletedAt: null } }),
     prisma.vacationRequest.count({ where: { ...scope, status: "PENDIENTE" } }),
     prisma.document.count({ where: { ...scope, requiresAck: true, acks: { none: {} } } }),
+    prisma.absence.count({ where: { ...scope, status: "PENDIENTE" } }),
+    gatherAlerts(user, 30),
   ]);
 
   // Capacity report for the admin's local (superadmin: skip, multi-local).
@@ -36,7 +41,9 @@ async function AdminHome({ userLocalId, year, isSuper }: { userLocalId: string |
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <Stat label="Empleados activos" value={employees} />
         <Stat label="Vacaciones pendientes" value={pendingVac} hint="por aprobar" />
+        <Stat label="Ausencias pendientes" value={pendingAbs} hint="por aprobar" />
         <Stat label="Documentos sin firmar" value={pendingDocs} />
+        <Stat label="Caducidades (30 d)" value={alerts.length} hint={alerts.filter((a) => a.overdue).length ? `${alerts.filter((a) => a.overdue).length} vencidas` : undefined} />
       </div>
 
       {capacity && (

@@ -30,6 +30,7 @@ model Local {
   code      String   @unique // p.ej. "CDM"
   name      String // "Corte de Manga"
   active    Boolean  @default(true)
+  alertLeadDays Int   @default(30) // antelación por defecto de avisos de caducidad
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -136,10 +137,14 @@ model Employee {
   weeklyHours      Float          @default(40) // jornada
   startDate        DateTime
   endDate          DateTime? // fin de contrato temporal
+  trialEndDate     DateTime? // fin del período de prueba
   status           EmployeeStatus @default(ACTIVO)
 
   // Vacaciones: por defecto hereda del año configurado; puede overridearse por empleado.
   vacationDaysOverride Int?
+
+  // Fichaje: PIN de tablet (hasheado, sin biometría — criterio AEPD spec §5).
+  pinHash String?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -150,6 +155,12 @@ model Employee {
   shifts             Shift[]
   documents          Document[]
   documentAcks       DocumentAck[]
+  timeEntries        TimeEntry[]
+  absences           Absence[]
+  incidents          Incident[]
+  expiries           Expiry[]
+  manualReads        ManualRead[]
+  announcementReads  AnnouncementRead[]
 
   @@index([localId, deletedAt])
 }
@@ -340,4 +351,209 @@ model DocumentAck {
   ip         String?
 
   @@unique([documentId, employeeId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FASE 2
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Fichaje (spec §4.4) — reconstruido en MADRE, tablet de barra, PIN, sin biometría
+model TimeEntry {
+  id         String    @id @default(cuid())
+  localId    String
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  clockIn    DateTime
+  clockOut   DateTime?
+  source     String    @default("TABLET") // origen del fichaje
+  createdAt  DateTime  @default(now())
+
+  // Registro inmutable: las correcciones NO editan en silencio; quedan anotadas.
+  corrections TimeCorrection[]
+
+  @@index([localId, clockIn])
+  @@index([employeeId, clockIn])
+}
+
+model TimeCorrection {
+  id          String   @id @default(cuid())
+  timeEntryId String
+  entry       TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  field       String // "clockIn" | "clockOut"
+  oldValue    DateTime?
+  newValue    DateTime?
+  reason      String
+  authorId    String?
+  authorEmail String?
+  createdAt   DateTime @default(now())
+
+  @@index([timeEntryId])
+}
+
+// ── Ausencias y permisos (spec §4.8)
+enum AbsenceType {
+  BAJA_MEDICA
+  MATRIMONIO
+  MUDANZA
+  FALLECIMIENTO
+  NACIMIENTO
+  DEBER_PUBLICO
+  LACTANCIA
+  OTRO
+}
+
+enum AbsenceStatus {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+  CANCELADA
+}
+
+model Absence {
+  id         String        @id @default(cuid())
+  localId    String
+  employeeId String
+  employee   Employee      @relation(fields: [employeeId], references: [id])
+  type       AbsenceType
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  status     AbsenceStatus @default(PENDIENTE)
+  decisionNote String?
+  decidedById  String?
+  decidedAt    DateTime?
+
+  // Justificante adjunto (baja médica, etc.)
+  justFileName   String?
+  justStorageKey String?
+  justMimeType   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([localId, status])
+  @@index([employeeId])
+}
+
+// ── Manual del bar (spec §4.6) — wiki editable + lectura confirmada + versionado
+model ManualSection {
+  id                  String   @id @default(cuid())
+  localId             String
+  slug                String
+  title               String
+  content             String   @db.Text
+  order               Int      @default(0)
+  version             Int      @default(1)
+  requiresReadConfirm Boolean  @default(true)
+  createdById         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  reads ManualRead[]
+
+  @@unique([localId, slug])
+  @@index([localId, order])
+}
+
+model ManualRead {
+  id         String        @id @default(cuid())
+  sectionId  String
+  section    ManualSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee      @relation(fields: [employeeId], references: [id])
+  version    Int // versión leída — si la sección sube de versión, se pide relectura
+  readAt     DateTime      @default(now())
+  ip         String?
+
+  @@unique([sectionId, employeeId, version])
+}
+
+// ── Tablón de anuncios (spec §4.10)
+model Announcement {
+  id           String   @id @default(cuid())
+  localId      String? // null = todos los locales (solo superadmin)
+  title        String
+  body         String   @db.Text
+  requiresRead Boolean  @default(false)
+  createdById  String?
+  createdByEmail String?
+  createdAt    DateTime @default(now())
+
+  reads AnnouncementRead[]
+
+  @@index([localId, createdAt])
+}
+
+model AnnouncementRead {
+  id             String       @id @default(cuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id])
+  readAt         DateTime     @default(now())
+
+  @@unique([announcementId, employeeId])
+}
+
+// ── Alertas y caducidades (spec §4.9)
+enum ExpiryType {
+  CARNET_MANIPULADOR
+  FORMACION_ALERGENOS
+  NIE
+  DNI
+  CONTRATO_TEMPORAL
+  PERIODO_PRUEBA
+  OTRO
+}
+
+model Expiry {
+  id         String     @id @default(cuid())
+  localId    String
+  employeeId String
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+  type       ExpiryType
+  label      String?
+  dueDate    DateTime
+  resolved   Boolean    @default(false)
+  createdById String?
+  createdAt  DateTime   @default(now())
+
+  @@index([localId, dueDate])
+  @@index([employeeId])
+}
+
+// ── Registro de incidencias (spec §4.11) — solo admin/encargado
+model Incident {
+  id          String   @id @default(cuid())
+  localId     String
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  date        DateTime
+  category    String? // rendimiento / disciplina
+  description String   @db.Text
+  fileName    String?
+  storageKey  String?
+  mimeType    String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId])
+  @@index([localId, date])
+}
+
+// ── Cierre de caja (spec §4.7) — módulo interno bajo el login de MADRE
+model CashClose {
+  id           String   @id @default(cuid())
+  localId      String
+  businessDate DateTime
+  openingFloat Float    @default(0) // fondo de caja
+  cashCounted  Float // efectivo contado
+  cardTotal    Float    @default(0) // tarjeta / datáfono
+  otherTotal   Float    @default(0) // otros medios
+  expectedCash Float? // efectivo esperado (opcional)
+  notes        String?
+  createdById  String?
+  createdByEmail String?
+  createdAt    DateTime @default(now())
+
+  @@index([localId, businessDate])
 }

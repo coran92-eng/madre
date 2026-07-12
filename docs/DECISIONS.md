@@ -44,8 +44,11 @@ Pendiente en despliegue (no es código):
 - **DPA art. 28 RGPD** con el proveedor de hosting (servidores UE).
 - **Backups diarios** con retención ≥ 30 días + prueba de restauración.
 - Procedimiento de **derechos ARCO** (exportar/eliminar datos de exempleado).
-- Recuperación de contraseña autónoma: el modelo ya contempla token+caducidad
-  (`User.resetToken`); falta conectar un proveedor de email transaccional.
+- Recuperación de contraseña autónoma: flujo completo (token + caducidad 1 h en
+  `User.resetToken`); falta conectar el proveedor de email (`src/lib/mailer.ts`
+  registra el enlace en consola en dev).
+- **Fichaje sin biometría ni geolocalización**: tablet con PIN individual
+  (criterio AEPD). Registro inmutable; correcciones solo con motivo + autor.
 
 ## Estado por fases
 
@@ -55,16 +58,24 @@ Pendiente en despliegue (no es código):
 3. Horarios ✅
 4. Repositorio de documentos con confirmación de recepción ✅
 
-**Fase 2 — pendiente**
-5. Integración/reconstrucción de fichaje + banco de horas
-6. Integración de cierre de caja (SSO interno)
-7. Manual del bar con lectura confirmada y versionado
-8. Ausencias y permisos, alertas de caducidad, tablón de anuncios, incidencias,
-   recuperación de contraseña por email, gestión de otros admins
+**Fase 2 — completada**
+5. Fichaje reconstruido en MADRE (tablet `/kiosk` + PIN, sin biometría),
+   registro inmutable con correcciones anotadas, export CSV para Inspección,
+   y banco de horas (fichado vs. planificado). *Sincronización offline: pendiente.*
+6. Cierre de caja como módulo interno bajo el login (histórico consultable).
+   *Nota: no había app externa que integrar; se construyó nativo.*
+7. Manual del bar: wiki editable, confirmación de lectura por sección con
+   registro (fecha/hora/IP), versionado que obliga a relectura.
+8. Ausencias y permisos (con justificante y aprobación), alertas de caducidad
+   (carnet manipulador, alérgenos, NIE/DNI, contrato temporal, período de prueba),
+   tablón de anuncios, registro de incidencias, gestión de usuarios/admins y
+   recuperación de contraseña autónoma (token 1 h; envío por *mailer* conectable).
 
 **Fase 3 — pendiente**
 - Activación multi-local real (Sastrería BCN y Madrid) — el modelo ya lo soporta
 - Acceso completo de gestoría (descarga de registro horario y contratación)
+- Sincronización offline del fichaje; envío real de emails (SMTP UE)
+- Manual con imágenes/vídeo embebido (hoy: texto enriquecido con saltos de línea)
 - ¿Catalán como segundo idioma?
 
 ## Notas de implementación

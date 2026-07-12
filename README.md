@@ -17,10 +17,31 @@ soft-delete para conservar el histórico 4 años.
 | Horarios — cuadrante semanal, publicación, horas planificadas vs. contrato | ✅ |
 | Documentos — repositorio + confirmación de recepción (firma simple con fecha/hora/IP) | ✅ |
 | Registro de actividad (log inmutable) | ✅ |
-| Cambio de contraseña | ✅ |
+| Cambio de contraseña + recuperación autónoma | ✅ |
 
-Fases 2 y 3 (fichaje, cierre de caja, manual, ausencias, alertas, tablón,
-incidencias, multi-local activo, gestoría): ver `docs/DECISIONS.md`.
+**Fase 2 — completada:**
+
+| Módulo | Estado |
+|---|---|
+| Fichaje (tablet + PIN, sin biometría) + banco de horas + corrección anotada + export CSV | ✅ |
+| Ausencias y permisos (con justificante) + flujo de aprobación | ✅ |
+| Manual del bar (wiki editable, lectura confirmada, versionado → relectura) | ✅ |
+| Tablón de anuncios (confirmación de lectura opcional) | ✅ |
+| Alertas y caducidades (carnet, alérgenos, NIE, contrato, período de prueba) | ✅ |
+| Registro de incidencias (solo admin, con adjunto) | ✅ |
+| Cierre de caja (módulo interno + histórico) | ✅ |
+| Gestión de usuarios/admins (superadmin) + recuperación de contraseña | ✅ |
+
+Fase 3 (multi-local activo, acceso completo gestoría, catalán): ver `docs/DECISIONS.md`.
+
+> **Fichaje (tablet):** ruta `/kiosk` sin login, protegida por PIN individual
+> (4-6 dígitos). El PIN se define desde la ficha del empleado. La tablet debe
+> estar online (sincronización offline queda para una iteración posterior).
+>
+> **Recuperación de contraseña:** el flujo (token + caducidad 1 h) es completo;
+> el envío de email usa un *mailer* conectable (`src/lib/mailer.ts`) que en dev
+> escribe el enlace en la consola del servidor. En producción se conecta un
+> proveedor SMTP/API de la UE.
 
 ## Principios (spec §2) — cómo están implementados
 

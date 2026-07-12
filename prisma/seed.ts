@@ -155,6 +155,62 @@ async function main() {
     },
   });
 
+  // ── FASE 2 demo data + verification ──────────────────────────────────────
+  const pinHash = await bcrypt.hash("1234", 12);
+  await prisma.employee.updateMany({ where: { localId: local.id }, data: { pinHash } });
+  // Carla: período de prueba a punto de terminar (alerta).
+  await prisma.employee.update({
+    where: { id: emps["Carla"] },
+    data: { trialEndDate: new Date(Date.now() + 15 * 86400000) },
+  });
+  // Bruno: carnet de manipulador caduca pronto.
+  await prisma.expiry.deleteMany({ where: { localId: local.id } });
+  await prisma.expiry.create({
+    data: { localId: local.id, employeeId: emps["Bruno"], type: "CARNET_MANIPULADOR", dueDate: new Date(Date.now() + 20 * 86400000) },
+  });
+
+  // Manual: sección con confirmación de lectura.
+  await prisma.manualSection.deleteMany({ where: { localId: local.id } });
+  await prisma.manualSection.create({
+    data: { localId: local.id, slug: "alergenos", title: "Carta y alérgenos", order: 1,
+      content: "Los 14 alérgenos de declaración obligatoria...\nProtocolo ante consulta de cliente.", requiresReadConfirm: true },
+  });
+
+  // Tablón.
+  await prisma.announcement.deleteMany({ where: { localId: local.id } });
+  await prisma.announcement.create({
+    data: { localId: local.id, title: "Reunión de equipo", body: "El lunes a las 11:00 antes de abrir.", requiresRead: true, createdByEmail: "admin@cortedemanga.es" },
+  });
+
+  // Ausencia pendiente.
+  await prisma.absence.deleteMany({ where: { localId: local.id } });
+  await prisma.absence.create({
+    data: { localId: local.id, employeeId: emps["Carla"], type: "MUDANZA",
+      startDate: new Date(Date.UTC(YEAR, 8, 1)), endDate: new Date(Date.UTC(YEAR, 8, 1)), reason: "Mudanza" },
+  });
+
+  // Cierre de caja de ejemplo.
+  await prisma.cashClose.deleteMany({ where: { localId: local.id } });
+  await prisma.cashClose.create({
+    data: { localId: local.id, businessDate: new Date(), openingFloat: 150, cashCounted: 842.5, cardTotal: 1210.0, expectedCash: 840, createdByEmail: "admin@cortedemanga.es" },
+  });
+
+  // ── VERIFY fichaje: entrada→salida + corrección anotada ──
+  await prisma.timeEntry.deleteMany({ where: { localId: local.id } });
+  const t0 = new Date(Date.UTC(YEAR, 0, 10, 8, 0));
+  const t1 = new Date(Date.UTC(YEAR, 0, 10, 16, 0));
+  const entry = await prisma.timeEntry.create({
+    data: { localId: local.id, employeeId: emps["Ana"], clockIn: t0, clockOut: t1, source: "TABLET" },
+  });
+  const corrected = new Date(Date.UTC(YEAR, 0, 10, 16, 30));
+  await prisma.timeCorrection.create({
+    data: { timeEntryId: entry.id, field: "clockOut", oldValue: t1, newValue: corrected, reason: "Cierre real 16:30", authorEmail: "admin@cortedemanga.es" },
+  });
+  await prisma.timeEntry.update({ where: { id: entry.id }, data: { clockOut: corrected } });
+  const corrCount = await prisma.timeCorrection.count({ where: { timeEntryId: entry.id } });
+  const finalEntry = await prisma.timeEntry.findUnique({ where: { id: entry.id } });
+  const correctionOk = corrCount === 1 && finalEntry?.clockOut?.getTime() === corrected.getTime();
+
   // Capacity math.
   const active = await prisma.employee.count({ where: { localId: local.id, deletedAt: null, status: "ACTIVO" } });
   const blocked = await prisma.blockedWeek.count({ where: { localId: local.id, year: YEAR } });
@@ -170,12 +226,15 @@ async function main() {
   console.log(`  Ana aprobada: semanas 30, 31   (req ${anaReq.id.slice(0, 8)})`);
   console.log(`  Bruno pendiente: semana 34      (req ${brunoReq.id.slice(0, 8)})`);
   console.log("─".repeat(60));
+  console.log(`  Fase 2: PIN de fichaje = 1234 · manual, tablón, ausencia, caja y caducidades sembrados`);
+  console.log("─".repeat(60));
   console.log("VERIFICACIÓN");
   console.log(`  [${overlapBlocked ? "PASS" : "FAIL"}] Anti-solapamiento: 2º intento sobre semana 30 rechazado por la BD`);
+  console.log(`  [${correctionOk ? "PASS" : "FAIL"}] Fichaje: corrección anotada + valor actualizado (banco de horas)`);
   console.log(`  Capacidad ${YEAR}: ${required} necesarias / ${available} disponibles (${totalWeeks}-${blocked}) → ${required <= available ? "CABE" : "NO CABE"}`);
   console.log("─".repeat(60));
 
-  if (!overlapBlocked) process.exit(1);
+  if (!overlapBlocked || !correctionOk) process.exit(1);
 }
 
 main()

@@ -6,6 +6,8 @@ import { canAccessLocal } from "@/lib/rbac";
 import { PageHeader, StatusBadge, fmtDate } from "@/components/ui";
 import EmployeeForm from "../EmployeeForm";
 import AccessPanel from "./AccessPanel";
+import { PinPanel, ExpiryPanel } from "./ExtraPanels";
+import { IncidentForm, DeleteIncident } from "../../incidents/IncidentsClient";
 import { updateEmployee, deactivateEmployee, reactivateEmployee } from "../actions";
 
 function toInput(d: Date | null): string {
@@ -16,7 +18,12 @@ export default async function EmployeeDetail({ params }: { params: { id: string 
   const user = await requireRole("SUPERADMIN", "ENCARGADO");
   const e = await prisma.employee.findUnique({
     where: { id: params.id },
-    include: { local: true, user: { select: { id: true, email: true, role: true, active: true } } },
+    include: {
+      local: true,
+      user: { select: { id: true, email: true, role: true, active: true } },
+      expiries: { orderBy: { dueDate: "asc" } },
+      incidents: { orderBy: { date: "desc" } },
+    },
   });
   if (!e || !canAccessLocal(user, e.localId)) notFound();
 
@@ -87,12 +94,54 @@ export default async function EmployeeDetail({ params }: { params: { id: string 
               weeklyHours: e.weeklyHours,
               startDate: toInput(e.startDate),
               endDate: toInput(e.endDate),
+              trialEndDate: toInput(e.trialEndDate),
               status: e.status,
               vacationDaysOverride: e.vacationDaysOverride,
             }}
           />
         </section>
       )}
+
+      {/* Fichaje PIN + caducidades */}
+      {!e.deletedAt && (
+        <div className="grid md:grid-cols-2 gap-4 mb-6">
+          <div className="card p-4">
+            <h2 className="font-semibold mb-3">Fichaje (tablet)</h2>
+            <PinPanel employeeId={e.id} hasPin={!!e.pinHash} />
+          </div>
+          <div className="card p-4">
+            <h2 className="font-semibold mb-3">Caducidades</h2>
+            <ExpiryPanel
+              employeeId={e.id}
+              expiries={e.expiries.map((x) => ({ id: x.id, type: x.type, label: x.label, dueDate: toInput(x.dueDate), resolved: x.resolved }))}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Incidencias (solo admin) */}
+      <section className="mb-6">
+        <h2 className="font-semibold mb-3">Registro de incidencias</h2>
+        {!e.deletedAt && <div className="mb-3"><IncidentForm fixedEmployeeId={e.id} /></div>}
+        {e.incidents.length === 0 ? (
+          <p className="text-sm text-stone-500">Sin incidencias.</p>
+        ) : (
+          <div className="card divide-y divide-stone-100">
+            {e.incidents.map((i) => (
+              <div key={i.id} className="p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-xs text-stone-400">{fmtDate(i.date)}{i.category ? ` · ${i.category}` : ""}</div>
+                  <div className="flex items-center gap-3">
+                    {i.storageKey && <a href={`/api/incidents/${i.id}/file`} target="_blank" className="text-madre hover:underline text-xs">Adjunto</a>}
+                    <DeleteIncident id={i.id} />
+                  </div>
+                </div>
+                <p className="text-sm text-stone-700 whitespace-pre-wrap mt-1">{i.description}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Danger / lifecycle */}
       <div className="card p-4 border-stone-200">

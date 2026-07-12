@@ -28,6 +28,9 @@ export default function LoginForm() {
         <p className="text-sm text-red-600 bg-red-50 rounded-md p-2">{state.error}</p>
       )}
       <Submit />
+      <a href="/forgot" className="block text-center text-sm text-stone-500 hover:underline">
+        ¿Olvidaste tu contraseña?
+      </a>
       <p className="text-xs text-stone-400 text-center">
         Acceso individual. La sesión caduca por seguridad.
       </p>

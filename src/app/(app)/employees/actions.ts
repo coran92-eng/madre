@@ -23,6 +23,7 @@ const employeeSchema = z.object({
   weeklyHours: z.coerce.number().min(0).max(60),
   startDate: z.string().min(1, "Fecha de alta requerida"),
   endDate: z.string().optional(),
+  trialEndDate: z.string().optional(),
   status: z.enum(["ACTIVO", "BAJA", "EXCEDENCIA"]),
   vacationDaysOverride: z.string().optional(),
 });
@@ -61,6 +62,7 @@ export async function createEmployee(_prev: FormResult, formData: FormData): Pro
       weeklyHours: d.weeklyHours,
       startDate: start,
       endDate: toDate(d.endDate),
+      trialEndDate: toDate(d.trialEndDate),
       status: d.status,
       vacationDaysOverride: d.vacationDaysOverride ? Number(d.vacationDaysOverride) : null,
     },
@@ -106,6 +108,7 @@ export async function updateEmployee(id: string, _prev: FormResult, formData: Fo
       weeklyHours: d.weeklyHours,
       startDate: start,
       endDate: toDate(d.endDate),
+      trialEndDate: toDate(d.trialEndDate),
       status: d.status,
       vacationDaysOverride: d.vacationDaysOverride ? Number(d.vacationDaysOverride) : null,
     },
@@ -183,4 +186,49 @@ export async function provisionAccess(id: string, role: "EMPLEADO" | "ENCARGADO"
   await audit({ ...auditContext(user), localId: emp.localId, action: "employee.provision_access", entity: "User", entityId: created.id, detail: { role } });
   revalidatePath(`/employees/${id}`);
   return { password: tempPassword, email: emp.email };
+}
+
+/** Set/replace an employee's tablet clock-in PIN (hashed). Admin only. */
+export async function setClockPin(id: string, pin: string): Promise<{ error?: string; ok?: boolean }> {
+  const user = await requireRole("SUPERADMIN", "ENCARGADO");
+  const emp = await prisma.employee.findUnique({ where: { id } });
+  if (!emp || !canAccessLocal(user, emp.localId)) return { error: "Sin permiso." };
+  if (!/^\d{4,6}$/.test(pin)) return { error: "El PIN debe tener 4-6 dígitos." };
+  await prisma.employee.update({ where: { id }, data: { pinHash: await hashPassword(pin) } });
+  await audit({ ...auditContext(user), localId: emp.localId, action: "employee.set_pin", entity: "Employee", entityId: id });
+  revalidatePath(`/employees/${id}`);
+  return { ok: true };
+}
+
+/** Add an expiry/caducidad entry for an employee (spec §4.9). */
+export async function addExpiry(
+  id: string,
+  type: string,
+  dueDate: string,
+  label: string
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await requireRole("SUPERADMIN", "ENCARGADO");
+  const emp = await prisma.employee.findUnique({ where: { id } });
+  if (!emp || !canAccessLocal(user, emp.localId)) return { error: "Sin permiso." };
+  const types = ["CARNET_MANIPULADOR", "FORMACION_ALERGENOS", "NIE", "DNI", "CONTRATO_TEMPORAL", "PERIODO_PRUEBA", "OTRO"];
+  if (!types.includes(type)) return { error: "Tipo no válido." };
+  const due = new Date(dueDate + "T00:00:00Z");
+  if (isNaN(due.getTime())) return { error: "Fecha no válida." };
+  const exp = await prisma.expiry.create({
+    data: { localId: emp.localId, employeeId: id, type: type as never, dueDate: due, label: label || null, createdById: user.id },
+  });
+  await audit({ ...auditContext(user), localId: emp.localId, action: "expiry.add", entity: "Expiry", entityId: exp.id, detail: { type } });
+  revalidatePath(`/employees/${id}`);
+  revalidatePath("/alerts");
+  return { ok: true };
+}
+
+export async function resolveExpiry(id: string): Promise<void> {
+  const user = await requireRole("SUPERADMIN", "ENCARGADO");
+  const exp = await prisma.expiry.findUnique({ where: { id } });
+  if (!exp || !canAccessLocal(user, exp.localId)) throw new Error("Sin permiso.");
+  await prisma.expiry.update({ where: { id }, data: { resolved: true } });
+  await audit({ ...auditContext(user), localId: exp.localId, action: "expiry.resolve", entity: "Expiry", entityId: id });
+  revalidatePath("/alerts");
+  revalidatePath(`/employees/${exp.employeeId}`);
 }
