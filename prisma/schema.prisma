@@ -37,6 +37,7 @@ model Local {
   name      String // "Corte de Manga"
   active    Boolean  @default(true)
   alertLeadDays Int   @default(30) // antelación por defecto de avisos de caducidad
+  defaultHourlyCost Float? // coste/hora por defecto para el panel de dirección (€)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -63,6 +64,15 @@ model User {
   resetExpiresAt DateTime?
   mustChangePassword Boolean @default(false)
 
+  // Seguridad: bloqueo tras intentos fallidos (anti fuerza bruta).
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+
+  // 2FA (TOTP) opcional, principalmente para admins.
+  totpSecret      String?
+  totpEnabled     Boolean  @default(false)
+  totpBackupCodes String[] @default([]) // hashes bcrypt, un solo uso cada uno
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -76,6 +86,10 @@ model Session {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // false justo tras el login si el usuario tiene 2FA activo; hasta que se
+  // verifique el código, la sesión no se considera autenticada para el resto
+  // de la app (ver getCurrentUser en lib/auth.ts).
+  twoFactorVerified Boolean @default(true)
   expiresAt DateTime
   createdAt DateTime @default(now())
   ip        String?
@@ -149,6 +163,10 @@ model Employee {
 
   // Vacaciones: por defecto hereda del año configurado; puede overridearse por empleado.
   vacationDaysOverride Int?
+
+  // Coste/hora para el panel de dirección (€). Si no se define, hereda
+  // Local.defaultHourlyCost; si tampoco existe, el panel no calcula coste en €.
+  hourlyCostOverride Float?
 
   // Fichaje: PIN de tablet (hasheado, sin biometría — criterio AEPD spec §5).
   pinHash String?
