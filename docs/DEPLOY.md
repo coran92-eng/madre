@@ -68,13 +68,21 @@ Para otro proveedor serverless sin Blobs, sustituye `saveFile`/`readFile`/
 
 ## Primer arranque tras desplegar
 
-La app arranca vacía. En cuanto `DATABASE_URL` esté bien configurada:
-1. Aplica el esquema a la base de datos nueva: `npx prisma migrate deploy`
-   (usa el `DATABASE_URL` de producción; hazlo desde tu máquina o como paso
-   de build — Netlify no lo ejecuta solo).
+La app arranca vacía. Netlify aplica el esquema automáticamente: el comando
+de build (`npm run build:netlify`, configurado en `netlify.toml`) ejecuta
+`prisma migrate deploy` antes de compilar, en cada despliegue. No hay que
+ejecutar nada a mano.
+
+1. Añade `DATABASE_URL` y `SESSION_SECRET` en Netlify (ver checklist arriba)
+   y despliega — el build creará las tablas solo.
 2. Visita el sitio: como no hay superadmin, redirige a `/setup`.
 3. Completa el asistente (superadmin, local, año de vacaciones) — todo desde
    la interfaz, sin tocar código.
+
+Si el build falla en el paso de `prisma migrate deploy`, revisa el log de
+Netlify: normalmente significa que `DATABASE_URL` no es alcanzable desde el
+build (host mal copiado, `sslmode=require` que falta, o el proveedor exige
+IP allowlisting — Neon/Supabase no lo requieren por defecto).
 
 ## Alternativa: Vercel
 

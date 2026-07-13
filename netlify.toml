@@ -1,5 +1,8 @@
 [build]
-  command = "npm run build"
+  # build:netlify aplica las migraciones pendientes de Prisma (prisma migrate
+  # deploy) antes de compilar, en cada despliegue — así la base de datos
+  # nunca se queda desincronizada del esquema del código.
+  command = "npm run build:netlify"
   publish = ".next"
 
 [build.environment]
