@@ -16,6 +16,7 @@ const ADMIN: Role[] = ["SUPERADMIN", "ENCARGADO"];
 
 const ITEMS: Item[] = [
   { href: "/dashboard", key: "nav.dashboard", roles: ALL },
+  { href: "/panel", key: "nav.panel", roles: ADMIN },
   { href: "/employees", key: "nav.employees", roles: ADMIN },
   { href: "/vacations", key: "nav.vacations", roles: STAFF },
   { href: "/absences", key: "nav.absences", roles: STAFF },
