@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { canAccessLocal } from "@/lib/rbac";
+import { getActiveLocalId } from "@/lib/localcontext";
 import { capacityCheck, getVacationYear, weekLabel } from "@/lib/vacations";
 import { PageHeader } from "@/components/ui";
 import { YearForm, RequestsToggle, BlockedWeeks } from "./ConfigForms";
@@ -12,10 +13,10 @@ export default async function VacationConfigPage({ searchParams }: { searchParam
   const user = await requireRole("SUPERADMIN", "ENCARGADO");
   const year = Number(searchParams.year) || new Date().getUTCFullYear();
 
-  const locals = await prisma.local.findMany({ orderBy: { name: "asc" } });
-  const localId =
-    searchParams.local ?? user.localId ?? locals[0]?.id ?? null;
+  // Superadmin: local del selector de la barra lateral (o ?local= explícito).
+  const localId = searchParams.local ?? (await getActiveLocalId(user));
   if (!localId || !canAccessLocal(user, localId)) return <p>Local no válido.</p>;
+  const local = await prisma.local.findUnique({ where: { id: localId } });
 
   const cfg = await getVacationYear(localId, year);
   const capacity = await capacityCheck(localId, year);
@@ -28,8 +29,14 @@ export default async function VacationConfigPage({ searchParams }: { searchParam
     <>
       <PageHeader
         title="Configuración de vacaciones"
-        subtitle={`Año ${year}`}
-        action={<Link href="/vacations" className="btn-secondary">Volver</Link>}
+        subtitle={`${local?.name ?? ""} · Año ${year}`}
+        action={
+          <div className="flex gap-2">
+            <Link href={`/vacations/config?local=${localId}&year=${year - 1}`} className="btn-secondary">← {year - 1}</Link>
+            <Link href={`/vacations/config?local=${localId}&year=${year + 1}`} className="btn-secondary">{year + 1} →</Link>
+            <Link href="/vacations" className="btn-secondary">Volver</Link>
+          </div>
+        }
       />
 
       {/* Capacity validator */}

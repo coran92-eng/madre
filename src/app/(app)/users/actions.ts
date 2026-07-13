@@ -65,3 +65,18 @@ export async function resetUserPassword(id: string): Promise<{ error?: string; p
   revalidatePath("/users");
   return { password: tempPassword, email: target.email };
 }
+
+/** Superadmin reasigna el local de una cuenta (encargado/gestoría sin ficha). */
+export async function setUserLocal(id: string, localId: string): Promise<{ error?: string; ok?: boolean }> {
+  const user = await requireRole("SUPERADMIN");
+  const target = await prisma.user.findUnique({ where: { id }, include: { employee: { select: { id: true } } } });
+  if (!target) return { error: "Usuario no encontrado." };
+  if (target.role === "SUPERADMIN") return { error: "El superadmin no está atado a un local." };
+  if (target.employee) return { error: "Esta cuenta está vinculada a una ficha: traslada al empleado desde su ficha." };
+  const local = await prisma.local.findUnique({ where: { id: localId } });
+  if (!local || !local.active) return { error: "Local no válido." };
+  await prisma.user.update({ where: { id }, data: { localId } });
+  await audit({ ...auditContext(user), localId, action: "user.set_local", entity: "User", entityId: id });
+  revalidatePath("/users");
+  return { ok: true };
+}

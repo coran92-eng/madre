@@ -31,12 +31,16 @@ export default async function VacationsPage({ searchParams }: { searchParams: { 
         title="Vacaciones"
         subtitle={`Año ${year}${cfg ? (cfg.requestsOpen ? " · solicitudes abiertas" : " · solicitudes cerradas") : " · sin configurar"}`}
         action={
-          isAdmin(user) ? (
-            <div className="flex gap-2">
-              <Link href="/vacations/config" className="btn-secondary">Configurar</Link>
-              <Link href="/vacations/approvals" className="btn-primary">Aprobaciones</Link>
-            </div>
-          ) : null
+          <div className="flex gap-2">
+            <Link href={`/vacations?year=${year - 1}`} className="btn-secondary">← {year - 1}</Link>
+            <Link href={`/vacations?year=${year + 1}`} className="btn-secondary">{year + 1} →</Link>
+            {isAdmin(user) && (
+              <>
+                <Link href="/vacations/config" className="btn-secondary">Configurar</Link>
+                <Link href="/vacations/approvals" className="btn-primary">Aprobaciones</Link>
+              </>
+            )}
+          </div>
         }
       />
 

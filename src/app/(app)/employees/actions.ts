@@ -93,34 +93,52 @@ export async function updateEmployee(id: string, _prev: FormResult, formData: Fo
   const start = toDate(d.startDate);
   if (!start) return { error: "Fecha de alta no válida." };
 
-  await prisma.employee.update({
-    where: { id },
-    data: {
-      firstName: d.firstName,
-      lastName: d.lastName,
-      nif: d.nif || null,
-      ssNumber: d.ssNumber || null,
-      iban: d.iban || null,
-      phone: d.phone || null,
-      email: d.email || null,
-      emergencyContact: d.emergencyContact || null,
-      emergencyPhone: d.emergencyPhone || null,
-      contractType: d.contractType,
-      weeklyHours: d.weeklyHours,
-      startDate: start,
-      endDate: toDate(d.endDate),
-      trialEndDate: toDate(d.trialEndDate),
-      status: d.status,
-      vacationDaysOverride: d.vacationDaysOverride ? Number(d.vacationDaysOverride) : null,
-    },
+  // Traslado entre centros: solo superadmin. El histórico (fichajes, vacaciones,
+  // documentos…) conserva el localId original — el traslado afecta a partir de ahora.
+  let newLocalId = current.localId;
+  if (d.localId !== current.localId) {
+    if (user.role !== "SUPERADMIN") return { error: "Solo el superadmin puede trasladar empleados de centro." };
+    const target = await prisma.local.findUnique({ where: { id: d.localId } });
+    if (!target || !target.active) return { error: "Local de destino no válido." };
+    newLocalId = target.id;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.employee.update({
+      where: { id },
+      data: {
+        localId: newLocalId,
+        firstName: d.firstName,
+        lastName: d.lastName,
+        nif: d.nif || null,
+        ssNumber: d.ssNumber || null,
+        iban: d.iban || null,
+        phone: d.phone || null,
+        email: d.email || null,
+        emergencyContact: d.emergencyContact || null,
+        emergencyPhone: d.emergencyPhone || null,
+        contractType: d.contractType,
+        weeklyHours: d.weeklyHours,
+        startDate: start,
+        endDate: toDate(d.endDate),
+        trialEndDate: toDate(d.trialEndDate),
+        status: d.status,
+        vacationDaysOverride: d.vacationDaysOverride ? Number(d.vacationDaysOverride) : null,
+      },
+    });
+    // La cuenta de acceso sigue al empleado a su nuevo centro.
+    if (newLocalId !== current.localId && current.userId) {
+      await tx.user.update({ where: { id: current.userId }, data: { localId: newLocalId } });
+    }
   });
 
   await audit({
     ...auditContext(user),
-    localId: current.localId,
-    action: "employee.update",
+    localId: newLocalId,
+    action: newLocalId !== current.localId ? "employee.transfer" : "employee.update",
     entity: "Employee",
     entityId: id,
+    detail: newLocalId !== current.localId ? { from: current.localId, to: newLocalId } : undefined,
   });
   revalidatePath(`/employees/${id}`);
   return { ok: true };

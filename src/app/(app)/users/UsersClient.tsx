@@ -2,7 +2,34 @@
 
 import { useState, useTransition } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { createUser, setUserActive, resetUserPassword } from "./actions";
+import { createUser, setUserActive, resetUserPassword, setUserLocal } from "./actions";
+
+export function LocalSelect({
+  userId,
+  currentLocalId,
+  locals,
+}: {
+  userId: string;
+  currentLocalId: string | null;
+  locals: { id: string; name: string }[];
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string>();
+  return (
+    <div>
+      <select
+        className="input text-xs py-1"
+        value={currentLocalId ?? ""}
+        disabled={pending}
+        onChange={(e) => start(async () => { const r = await setUserLocal(userId, e.target.value); setError(r.error); })}
+      >
+        <option value="" disabled>—</option>
+        {locals.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+      </select>
+      {error && <p className="text-xs text-red-600 mt-0.5">{error}</p>}
+    </div>
+  );
+}
 
 function Sub() {
   const { pending } = useFormStatus();
