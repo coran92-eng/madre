@@ -245,6 +245,34 @@ async function main() {
   const tipsSum = Math.round(pool.shares.reduce((a, s) => a + s.amount, 0) * 100) / 100;
   const tipsOk = Math.abs(tipsSum - tipTotal) < 0.011; // 90/3 = 30 exacto
 
+  // ── Nivel 2: onboarding + formación ──
+  await prisma.onboardingTemplate.deleteMany({ where: { localId: local.id } });
+  const onb = await prisma.onboardingTemplate.create({
+    data: {
+      localId: local.id, name: "Incorporación CDM",
+      items: { create: [
+        { label: "Contrato firmado", order: 0 },
+        { label: "Uniformidad entregada", order: 1 },
+        { label: "PIN de fichaje configurado", order: 2 },
+        { label: "Lectura del manual confirmada", order: 3 },
+        { label: "Formación de manipulador vigente", order: 4 },
+      ] },
+    },
+    include: { items: true },
+  });
+  // Carla (incorporación reciente): 2 tareas hechas.
+  for (const it of onb.items.slice(0, 2)) {
+    await prisma.onboardingCheck.create({ data: { localId: local.id, employeeId: emps["Carla"], itemId: it.id, done: true, byName: "Ana García" } });
+  }
+
+  await prisma.course.deleteMany({ where: { localId: local.id } });
+  const manip = await prisma.course.create({ data: { localId: local.id, name: "Manipulador de alimentos", validityMonths: 48 } });
+  await prisma.course.create({ data: { localId: local.id, name: "Alérgenos", validityMonths: 24 } });
+  // Bruno hizo el de manipulador hace 47 meses → renovación en ~1 mes (sale en /alerts).
+  const completed = new Date(); completed.setMonth(completed.getMonth() - 47);
+  const expires = new Date(completed); expires.setMonth(expires.getMonth() + 48);
+  await prisma.courseCompletion.create({ data: { localId: local.id, courseId: manip.id, employeeId: emps["Bruno"], completedOn: completed, expiresOn: expires } });
+
   // Capacity math.
   const active = await prisma.employee.count({ where: { localId: local.id, deletedAt: null, status: "ACTIVO" } });
   const blocked = await prisma.blockedWeek.count({ where: { localId: local.id, year: YEAR } });
@@ -262,6 +290,7 @@ async function main() {
   console.log("─".repeat(60));
   console.log(`  Fase 2: PIN de fichaje = 1234 · manual, tablón, ausencia, caja y caducidades sembrados`);
   console.log(`  Corazón del bar: 2 puntos APPCC, checklist de apertura, parte de turno y bote de propinas`);
+  console.log(`  Nivel 2: panel de dirección, onboarding (plantilla + progreso) y formación (cursos + renovación)`);
   console.log("─".repeat(60));
   console.log("VERIFICACIÓN");
   console.log(`  [${overlapBlocked ? "PASS" : "FAIL"}] Anti-solapamiento: 2º intento sobre semana 30 rechazado por la BD`);

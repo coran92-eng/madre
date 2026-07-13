@@ -36,7 +36,7 @@ export async function gatherAlerts(user: SessionUser, leadDays = 30): Promise<Al
   const now = new Date();
   const horizon = new Date(now.getTime() + leadDays * 86400000);
 
-  const [expiries, employees] = await Promise.all([
+  const [expiries, employees, completions] = await Promise.all([
     prisma.expiry.findMany({
       where: { ...scope, resolved: false, dueDate: { lte: horizon } },
       include: { employee: { select: { firstName: true, lastName: true } } },
@@ -44,6 +44,10 @@ export async function gatherAlerts(user: SessionUser, leadDays = 30): Promise<Al
     prisma.employee.findMany({
       where: { ...scope, deletedAt: null },
       select: { id: true, firstName: true, lastName: true, endDate: true, trialEndDate: true },
+    }),
+    prisma.courseCompletion.findMany({
+      where: { ...scope, expiresOn: { not: null, lte: horizon } },
+      include: { course: { select: { name: true } } },
     }),
   ]);
 
@@ -78,6 +82,19 @@ export async function gatherAlerts(user: SessionUser, leadDays = 30): Promise<Al
         });
       }
     }
+  }
+
+  const nameById = new Map(employees.map((e) => [e.id, `${e.lastName}, ${e.firstName}`]));
+  for (const c of completions) {
+    if (!c.expiresOn) continue;
+    alerts.push({
+      employeeId: c.employeeId,
+      employeeName: nameById.get(c.employeeId) ?? "—",
+      kind: `${c.course.name} (renovación)`,
+      dueDate: c.expiresOn,
+      daysLeft: daysBetween(c.expiresOn, now),
+      overdue: c.expiresOn < now,
+    });
   }
 
   alerts.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
