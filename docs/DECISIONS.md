@@ -117,6 +117,20 @@ Pendiente en despliegue (no es código):
 - **Propinas**: bote por turno con reparto a partes iguales, por horas fichadas o
   manual; cuadre exacto por redondeo; el empleado ve su acumulado.
 
+**Nivel 2 (dirección y personas)**
+- **Panel de dirección** (`/panel`): cruza datos ya recogidos por local/mes —
+  ventas (neto de cierres de caja) vs. horas trabajadas/planificadas →
+  productividad (ventas por hora), horas extra, propinas, absentismo, rotación
+  (altas/bajas) y empleados activos, con tendencia de 6 meses. Sin esquema nuevo.
+  El coste de personal en € requiere salarios (hoy las nóminas son PDF); se usa
+  la productividad como proxy estándar.
+- **Onboarding de altas** (`/onboarding`): plantilla de incorporación configurable
+  y progreso por empleado (contrato, uniformidad, PIN, lectura del manual,
+  formación…), gestionable por el admin.
+- **Formación + PRL** (`/training`): cursos con validez configurable y registro de
+  formación completada con certificado; las renovaciones (manipulador, alérgenos,
+  PRL…) se integran en las alertas de caducidad (`/alerts` + dashboard).
+
 **Pendiente REAL (no es código de la app)**
 - **Infra de producción**: hosting bajo control de la propiedad, HTTPS, cifrado en
   reposo, backups diarios + prueba de restauración, DPA art. 28, dominio, y

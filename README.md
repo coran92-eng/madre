@@ -79,6 +79,14 @@ soft-delete para conservar el histórico 4 años.
 > las claves `VAPID_*` (ver `.env.example`). Sin claves, el push queda desactivado
 > y las notificaciones siguen llegando por email.
 
+**Nivel 2 (dirección y personas):**
+
+| Función | Estado |
+|---|---|
+| Panel de dirección: ventas (de caja) vs. horas → productividad, absentismo, rotación, propinas y tendencia de 6 meses | ✅ |
+| Onboarding de altas: plantilla de incorporación configurable + progreso por empleado | ✅ |
+| Formación + PRL: cursos con validez y renovaciones que entran en las alertas de caducidad | ✅ |
+
 Lo único pendiente es **infra de producción** y **decisiones de la propiedad** — ver `docs/DECISIONS.md`.
 
 > **Fichaje (tablet):** ruta `/kiosk` sin login, protegida por PIN individual
