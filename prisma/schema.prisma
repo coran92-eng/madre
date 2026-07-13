@@ -810,3 +810,80 @@ model TipShare {
 
   @@index([employeeId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NIVEL 2 · Onboarding de altas + Formación/PRL
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Onboarding: plantilla de incorporación configurable + progreso por empleado.
+model OnboardingTemplate {
+  id          String   @id @default(cuid())
+  localId     String
+  name        String
+  active      Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  items OnboardingItem[]
+
+  @@index([localId, active])
+}
+
+model OnboardingItem {
+  id         String             @id @default(cuid())
+  templateId String
+  template   OnboardingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  label      String
+  order      Int                @default(0)
+
+  checks OnboardingCheck[]
+}
+
+model OnboardingCheck {
+  id         String         @id @default(cuid())
+  localId    String
+  employeeId String
+  itemId     String
+  item       OnboardingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  done       Boolean        @default(false)
+  note       String?
+  byId       String?
+  byName     String?
+  at         DateTime       @default(now())
+
+  @@unique([employeeId, itemId])
+  @@index([localId, employeeId])
+}
+
+// Formación / PRL: cursos con seguimiento y renovaciones (enlazan con caducidades).
+model Course {
+  id             String   @id @default(cuid())
+  localId        String
+  name           String // "Manipulador de alimentos", "Alérgenos", "PRL"
+  validityMonths Int? // meses de validez para renovación; null = no caduca
+  active         Boolean  @default(true)
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  completions CourseCompletion[]
+
+  @@index([localId, active])
+}
+
+model CourseCompletion {
+  id          String    @id @default(cuid())
+  localId     String
+  courseId    String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  employeeId  String
+  completedOn DateTime
+  expiresOn   DateTime? // completedOn + validityMonths
+  fileName    String?
+  storageKey  String?
+  mimeType    String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@index([employeeId])
+  @@index([localId, expiresOn])
+}
