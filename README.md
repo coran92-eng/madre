@@ -65,6 +65,20 @@ soft-delete para conservar el histórico 4 años.
 | Imágenes en el manual (bucket privado + Markdown) | ✅ |
 | Migraciones Prisma formales (`npm run db:migrate`) + tests (`npm test`) | ✅ |
 
+**Corazón del bar · nivel 1 (operativa diaria):**
+
+| Función | Estado |
+|---|---|
+| APPCC / seguridad alimentaria: puntos de control configurables (umbral/sí-no/texto), registro inmutable, alerta si sale de rango, CSV para Sanidad | ✅ |
+| Checklists de apertura/cierre configurables, con quién y cuándo | ✅ |
+| Parte de turno (relevo) con autor/hora y confirmación de lectura | ✅ |
+| Notificaciones **push** (PWA, web-push/VAPID) además de email | ✅ |
+| Propinas: bote por turno con reparto igual / por horas fichadas / manual | ✅ |
+
+> **Push:** cada usuario las activa en *Mi cuenta*; requiere HTTPS en producción y
+> las claves `VAPID_*` (ver `.env.example`). Sin claves, el push queda desactivado
+> y las notificaciones siguen llegando por email.
+
 Lo único pendiente es **infra de producción** y **decisiones de la propiedad** — ver `docs/DECISIONS.md`.
 
 > **Fichaje (tablet):** ruta `/kiosk` sin login, protegida por PIN individual

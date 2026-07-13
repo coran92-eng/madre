@@ -107,6 +107,15 @@ async function EmployeeHome({ userId, year }: { userId: string; year: number }) 
         <QuickLink href="/vacations" title="Mis vacaciones" desc="Solicitar semanas y ver el calendario compartido." />
         <QuickLink href="/schedule" title="Mi horario" desc="Tus turnos publicados." />
         <QuickLink href="/documents" title="Mis documentos" desc="Nóminas y contratos. Confirma recepción." />
+        <QuickLink href="/tips" title="Mis propinas" desc="Reparto del bote por turno." />
+      </div>
+      <div>
+        <h2 className="font-semibold mb-2">Operativa del turno</h2>
+        <div className="grid md:grid-cols-2 gap-4">
+          <QuickLink href="/checklists" title="Checklists" desc="Apertura y cierre del local." />
+          <QuickLink href="/appcc" title="APPCC" desc="Registrar temperaturas y controles." />
+          <QuickLink href="/shiftlog" title="Parte de turno" desc="Notas de relevo entre turnos." />
+        </div>
       </div>
     </div>
   );

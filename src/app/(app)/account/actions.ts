@@ -34,3 +34,23 @@ export async function changePassword(
   await audit({ ...auditContext(sessionUser), localId: user.localId, action: "auth.password_change", entity: "User", entityId: user.id });
   return { ok: true };
 }
+
+// ── Notificaciones push (Web Push) ──────────────────────────────────────────
+
+export async function savePushSubscription(sub: { endpoint: string; keys: { p256dh: string; auth: string } }): Promise<{ ok: boolean }> {
+  const user = await requireUser();
+  if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return { ok: false };
+  await prisma.pushSubscription.upsert({
+    where: { endpoint: sub.endpoint },
+    create: { userId: user.id, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+    update: { userId: user.id, p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+  });
+  await audit({ ...auditContext(user), action: "push.subscribe", entity: "PushSubscription" });
+  return { ok: true };
+}
+
+export async function removePushSubscription(endpoint: string): Promise<{ ok: boolean }> {
+  const user = await requireUser();
+  await prisma.pushSubscription.deleteMany({ where: { endpoint, userId: user.id } });
+  return { ok: true };
+}

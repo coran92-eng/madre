@@ -1,6 +1,36 @@
-// MADRE fichaje — service worker para que la tablet cargue sin conexión.
-// Alcance mínimo: cachea el shell de /kiosk y los assets estáticos de Next.
+// MADRE service worker: (1) shell offline del kiosko, (2) notificaciones push.
 const CACHE = "madre-kiosk-v1";
+
+// ── Web Push ────────────────────────────────────────────────────────────────
+self.addEventListener("push", (event) => {
+  let data = { title: "MADRE", body: "", url: "/dashboard" };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch (_e) {
+    if (event.data) data.body = event.data.text();
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      data: { url: data.url },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/dashboard";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ("focus" in c) { c.navigate(url); return c.focus(); }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

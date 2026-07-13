@@ -215,6 +215,36 @@ async function main() {
   const finalEntry = await prisma.timeEntry.findUnique({ where: { id: entry.id } });
   const correctionOk = corrCount === 1 && finalEntry?.clockOut?.getTime() === corrected.getTime();
 
+  // ── Corazón del bar: APPCC, checklist, parte de turno, propinas ──
+  await prisma.appccPoint.deleteMany({ where: { localId: local.id } });
+  await prisma.appccPoint.create({ data: { localId: local.id, name: "Nevera 1", category: "TEMPERATURA", kind: "NUMERIC", unit: "°C", minValue: 0, maxValue: 4, frequency: "POR_TURNO", order: 1 } });
+  await prisma.appccPoint.create({ data: { localId: local.id, name: "Limpieza cierre", category: "LIMPIEZA", kind: "BOOLEAN", frequency: "DIARIO", order: 2 } });
+
+  await prisma.checklistTemplate.deleteMany({ where: { localId: local.id } });
+  const chk = await prisma.checklistTemplate.create({
+    data: {
+      localId: local.id, name: "Apertura de barra", moment: "APERTURA", order: 1,
+      items: { create: [{ label: "Encender cafetera", order: 0 }, { label: "Cuadrar caja / fondo", order: 1 }, { label: "Revisar cámaras y temperaturas", order: 2 }] },
+    },
+  });
+
+  await prisma.shiftLog.deleteMany({ where: { localId: local.id } });
+  await prisma.shiftLog.create({ data: { localId: local.id, businessDate: new Date(new Date().toDateString()), shift: "Tarde", body: "Se acabó el hielo, pedir mañana. Mesa 4 dejó a deber 20€.", authorName: "Ana García" } });
+
+  await prisma.tipPool.deleteMany({ where: { localId: local.id } });
+  const tipTotal = 90;
+  const parts = [emps["Ana"], emps["Bruno"], emps["Carla"]];
+  const per = Math.round((tipTotal / parts.length) * 100) / 100;
+  const pool = await prisma.tipPool.create({
+    data: {
+      localId: local.id, businessDate: new Date(), totalAmount: tipTotal, method: "EQUAL", shift: "Noche",
+      shares: { create: parts.map((id) => ({ employeeId: id, amount: per })) },
+    },
+    include: { shares: true },
+  });
+  const tipsSum = Math.round(pool.shares.reduce((a, s) => a + s.amount, 0) * 100) / 100;
+  const tipsOk = Math.abs(tipsSum - tipTotal) < 0.011; // 90/3 = 30 exacto
+
   // Capacity math.
   const active = await prisma.employee.count({ where: { localId: local.id, deletedAt: null, status: "ACTIVO" } });
   const blocked = await prisma.blockedWeek.count({ where: { localId: local.id, year: YEAR } });
@@ -231,14 +261,16 @@ async function main() {
   console.log(`  Bruno pendiente: semana 34      (req ${brunoReq.id.slice(0, 8)})`);
   console.log("─".repeat(60));
   console.log(`  Fase 2: PIN de fichaje = 1234 · manual, tablón, ausencia, caja y caducidades sembrados`);
+  console.log(`  Corazón del bar: 2 puntos APPCC, checklist de apertura, parte de turno y bote de propinas`);
   console.log("─".repeat(60));
   console.log("VERIFICACIÓN");
   console.log(`  [${overlapBlocked ? "PASS" : "FAIL"}] Anti-solapamiento: 2º intento sobre semana 30 rechazado por la BD`);
   console.log(`  [${correctionOk ? "PASS" : "FAIL"}] Fichaje: corrección anotada + valor actualizado (banco de horas)`);
+  console.log(`  [${tipsOk ? "PASS" : "FAIL"}] Propinas: el reparto suma exactamente el total del bote`);
   console.log(`  Capacidad ${YEAR}: ${required} necesarias / ${available} disponibles (${totalWeeks}-${blocked}) → ${required <= available ? "CABE" : "NO CABE"}`);
   console.log("─".repeat(60));
 
-  if (!overlapBlocked || !correctionOk) process.exit(1);
+  if (!overlapBlocked || !correctionOk || !tipsOk) process.exit(1);
 }
 
 main()

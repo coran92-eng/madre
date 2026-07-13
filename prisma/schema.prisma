@@ -61,6 +61,7 @@ model User {
   updatedAt DateTime  @updatedAt
 
   sessions  Session[]
+  pushSubscriptions PushSubscription[]
 
   @@index([localId])
 }
@@ -616,4 +617,196 @@ model ManualMedia {
   createdAt   DateTime @default(now())
 
   @@index([localId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORAZÓN DEL BAR · nivel 1 (APPCC, checklists, parte de turno, push, propinas)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── APPCC / seguridad alimentaria (registro legal obligatorio) ──────────────
+enum AppccKind {
+  NUMERIC // temperaturas, acidez del aceite…
+  BOOLEAN // limpieza hecha sí/no
+  TEXT // proveedor, lote, observación
+}
+
+enum AppccFrequency {
+  POR_TURNO
+  DIARIO
+  SEMANAL
+}
+
+// Punto de control configurable por el admin (cero hardcode).
+model AppccPoint {
+  id          String         @id @default(cuid())
+  localId     String
+  name        String // "Nevera 1", "Aceite freidora"
+  category    String // TEMPERATURA / RECEPCION / LIMPIEZA / ACEITE / TRAZABILIDAD / OTRO
+  kind        AppccKind      @default(NUMERIC)
+  unit        String? // "°C"
+  minValue    Float?
+  maxValue    Float?
+  frequency   AppccFrequency @default(DIARIO)
+  active      Boolean        @default(true)
+  order       Int            @default(0)
+  createdById String?
+  createdAt   DateTime       @default(now())
+
+  records AppccRecord[]
+
+  @@index([localId, active])
+}
+
+// Registro inmutable: quién, cuándo, valor y si es conforme.
+model AppccRecord {
+  id             String     @id @default(cuid())
+  localId        String
+  pointId        String
+  point          AppccPoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  numValue       Float?
+  boolValue      Boolean?
+  textValue      String?
+  ok             Boolean // dentro de umbral / conforme
+  note           String?
+  recordedById   String?
+  recordedByName String?
+  recordedAt     DateTime   @default(now())
+  ip             String?
+
+  @@index([localId, recordedAt])
+  @@index([pointId, recordedAt])
+}
+
+// ── Checklists de apertura / cierre ─────────────────────────────────────────
+enum ChecklistMoment {
+  APERTURA
+  CIERRE
+  OTRO
+}
+
+model ChecklistTemplate {
+  id          String          @id @default(cuid())
+  localId     String
+  name        String
+  moment      ChecklistMoment @default(APERTURA)
+  active      Boolean         @default(true)
+  order       Int             @default(0)
+  createdById String?
+  createdAt   DateTime        @default(now())
+
+  items ChecklistItem[]
+  runs  ChecklistRun[]
+
+  @@index([localId, active])
+}
+
+model ChecklistItem {
+  id         String            @id @default(cuid())
+  templateId String
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  label      String
+  order      Int               @default(0)
+
+  checks ChecklistCheck[]
+}
+
+model ChecklistRun {
+  id           String            @id @default(cuid())
+  localId      String
+  templateId   String
+  template     ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  businessDate DateTime
+  createdAt    DateTime          @default(now())
+
+  checks ChecklistCheck[]
+
+  @@unique([templateId, businessDate])
+  @@index([localId, businessDate])
+}
+
+model ChecklistCheck {
+  id      String        @id @default(cuid())
+  runId   String
+  run     ChecklistRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  itemId  String
+  item    ChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  checked Boolean       @default(true)
+  note    String?
+  byId    String?
+  byName  String?
+  at      DateTime      @default(now())
+
+  @@unique([runId, itemId])
+}
+
+// ── Parte de turno (relevo) ─────────────────────────────────────────────────
+model ShiftLog {
+  id           String         @id @default(cuid())
+  localId      String
+  businessDate DateTime
+  shift        String? // "Mañana", "Tarde", "Noche"
+  body         String         @db.Text
+  authorId     String?
+  authorName   String?
+  createdAt    DateTime       @default(now())
+
+  reads ShiftLogRead[]
+
+  @@index([localId, businessDate])
+}
+
+model ShiftLogRead {
+  id         String   @id @default(cuid())
+  logId      String
+  log        ShiftLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  employeeId String
+  readAt     DateTime @default(now())
+
+  @@unique([logId, employeeId])
+}
+
+// ── Notificaciones push (Web Push) ──────────────────────────────────────────
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ── Propinas ────────────────────────────────────────────────────────────────
+enum TipMethod {
+  EQUAL // a partes iguales
+  BY_HOURS // proporcional a horas fichadas ese día
+  MANUAL // importes introducidos a mano
+}
+
+model TipPool {
+  id           String     @id @default(cuid())
+  localId      String
+  businessDate DateTime
+  shift        String?
+  totalAmount  Float
+  method       TipMethod  @default(EQUAL)
+  note         String?
+  createdById  String?
+  createdAt    DateTime   @default(now())
+
+  shares TipShare[]
+
+  @@index([localId, businessDate])
+}
+
+model TipShare {
+  id         String  @id @default(cuid())
+  poolId     String
+  pool       TipPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  employeeId String
+  amount     Float
+
+  @@index([employeeId])
 }

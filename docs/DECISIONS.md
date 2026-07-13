@@ -102,6 +102,21 @@ Pendiente en despliegue (no es código):
 - **Migraciones Prisma** formales (baseline en `prisma/migrations/`, `db:migrate`).
 - **Tests** unitarios de la lógica pura (`vitest`: ISO week, fichaje, markdown, i18n).
 
+**Corazón del bar · nivel 1 (operativa diaria del local)**
+- **APPCC / seguridad alimentaria**: puntos de control configurables por el admin
+  (numérico con umbral, sí/no, texto) y registro diario inmutable con conforme/no
+  conforme; si un valor sale de umbral, avisa a los encargados. Export CSV para
+  Sanidad. Reaprovecha los patrones de confirmación y de caducidades.
+- **Checklists de apertura/cierre**: plantillas y tareas configurables; ejecución
+  diaria con quién marcó cada tarea y a qué hora.
+- **Parte de turno (relevo)**: notas por turno con autor/hora y confirmación de
+  lectura del siguiente turno.
+- **Notificaciones push (PWA)**: `web-push` + VAPID; cada usuario las activa por
+  dispositivo en *Mi cuenta*. Integradas en `notify()` (email + push). Sin claves
+  `VAPID_*`, el push se desactiva y sólo se envía email.
+- **Propinas**: bote por turno con reparto a partes iguales, por horas fichadas o
+  manual; cuadre exacto por redondeo; el empleado ve su acumulado.
+
 **Pendiente REAL (no es código de la app)**
 - **Infra de producción**: hosting bajo control de la propiedad, HTTPS, cifrado en
   reposo, backups diarios + prueba de restauración, DPA art. 28, dominio, y
