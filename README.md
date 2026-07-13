@@ -141,6 +141,21 @@ npm run db:seed
 npm run dev
 ```
 
+## Despliegue en producción
+
+- **Netlify**: incluye `netlify.toml` (plugin oficial de Next.js) y detecta el
+  entorno automáticamente para usar **Netlify Blobs** como almacenamiento de
+  documentos (sin disco persistente en Functions). Guía completa, checklist de
+  variables de entorno y solución al error
+  *"Application error: a server-side exception has occurred"* en
+  **[`docs/DEPLOY.md`](docs/DEPLOY.md)**.
+- **Docker / self-hosting**: `Dockerfile` + `docker-compose.yml` (app +
+  PostgreSQL, con healthcheck). `scripts/backup.sh` para backups diarios con
+  retención configurable (cron).
+- **Diagnóstico**: `/api/health` (sin login) muestra qué variables de entorno
+  faltan y si la base de datos responde — úsalo primero ante cualquier error
+  tras desplegar.
+
 ### Credenciales de demo (tras `npm run db:seed`)
 
 | Rol | Email | Contraseña |

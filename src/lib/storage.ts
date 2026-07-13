@@ -2,8 +2,16 @@ import "server-only";
 import { promises as fs } from "fs";
 import path from "path";
 
-// Local dev: STORAGE_DIR on disk. Production: swap for an EU private bucket with
-// signed URLs (spec §5/§8). The rest of the app only touches these helpers.
+// Dos backends, misma interfaz (saveFile/readFile/deleteFile):
+//  - Netlify Blobs, cuando la app corre en Netlify (detectado por la env var
+//    NETLIFY que la plataforma inyecta sola) — persiste entre despliegues,
+//    sin credenciales que configurar.
+//  - Disco local (STORAGE_DIR), para desarrollo y self-hosting (Docker/VPS).
+// En producción fuera de Netlify, sustituir por un bucket privado con URLs
+// firmadas (spec §5/§8) implementando el mismo trío de funciones.
+
+const useNetlifyBlobs = !!process.env.NETLIFY;
+
 function baseDir(): string {
   return path.resolve(process.env.STORAGE_DIR || "./storage");
 }
@@ -18,19 +26,41 @@ function resolveKey(key: string): string {
   return full;
 }
 
+async function getBlobStore() {
+  const { getStore } = await import("@netlify/blobs");
+  return getStore({ name: "madre-documents", consistency: "strong" });
+}
+
 export async function saveFile(key: string, data: Buffer): Promise<void> {
+  if (useNetlifyBlobs) {
+    const store = await getBlobStore();
+    const arrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+    await store.set(key, arrayBuffer);
+    return;
+  }
   const full = resolveKey(key);
   await fs.mkdir(path.dirname(full), { recursive: true });
   await fs.writeFile(full, data);
 }
 
 export async function readFile(key: string): Promise<Buffer> {
+  if (useNetlifyBlobs) {
+    const store = await getBlobStore();
+    const data = await store.get(key, { type: "arrayBuffer" });
+    if (!data) throw new Error("Archivo no encontrado.");
+    return Buffer.from(data);
+  }
   return fs.readFile(resolveKey(key));
 }
 
 /** Best-effort delete (ARCO / retention purge). Never throws on missing file. */
 export async function deleteFile(key: string): Promise<void> {
   try {
+    if (useNetlifyBlobs) {
+      const store = await getBlobStore();
+      await store.delete(key);
+      return;
+    }
     await fs.unlink(resolveKey(key));
   } catch {
     /* already gone */

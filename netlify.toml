@@ -1,0 +1,26 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# MADRE necesita estas variables configuradas en Netlify (Site settings →
+# Environment variables), NUNCA en este archivo (son secretos):
+#   DATABASE_URL   → PostgreSQL alcanzable desde internet (NO localhost).
+#                    Usa un proveedor gestionado en la UE con pooling para
+#                    serverless (Neon, Supabase, Railway...); añade
+#                    ?pgbouncer=true&connection_limit=1 si el proveedor usa
+#                    PgBouncer en modo transacción.
+#   SESSION_SECRET → 48+ bytes aleatorios (ver .env.example).
+#   STORAGE_DIR    → en Netlify Functions el disco es efímero y de solo
+#                    lectura salvo /tmp (se borra entre invocaciones). Los
+#                    documentos NO sobrevivirán entre despliegues con
+#                    STORAGE_DIR="./storage". Ver docs/DEPLOY.md.
+#   SMTP_URL, MAIL_FROM, VAPID_* → opcionales (email real y push).
+#
+# Ver docs/DEPLOY.md para la checklist completa y el diagnóstico de errores
+# habituales ("Application error: a server-side exception has occurred").
