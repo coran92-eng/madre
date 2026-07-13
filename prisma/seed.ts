@@ -43,7 +43,7 @@ async function main() {
   const local = await prisma.local.upsert({
     where: { code: "CDM" },
     update: {},
-    create: { code: "CDM", name: "Corte de Manga" },
+    create: { code: "CDM", name: "Corte de Manga", defaultHourlyCost: 14.5 },
   });
 
   // Fase 3: multi-local. Los otros dos locales del grupo (arrancan vacíos).

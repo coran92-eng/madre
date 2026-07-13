@@ -27,6 +27,7 @@ const employeeSchema = z.object({
   trialEndDate: z.string().optional(),
   status: z.enum(["ACTIVO", "BAJA", "EXCEDENCIA"]),
   vacationDaysOverride: z.string().optional(),
+  hourlyCostOverride: z.string().optional(),
 });
 
 function toDate(s?: string): Date | null {
@@ -66,6 +67,7 @@ export async function createEmployee(_prev: FormResult, formData: FormData): Pro
       trialEndDate: toDate(d.trialEndDate),
       status: d.status,
       vacationDaysOverride: d.vacationDaysOverride ? Number(d.vacationDaysOverride) : null,
+      hourlyCostOverride: d.hourlyCostOverride ? Number(d.hourlyCostOverride) : null,
     },
   });
 
@@ -124,6 +126,7 @@ export async function updateEmployee(id: string, _prev: FormResult, formData: Fo
         trialEndDate: toDate(d.trialEndDate),
         status: d.status,
         vacationDaysOverride: d.vacationDaysOverride ? Number(d.vacationDaysOverride) : null,
+        hourlyCostOverride: d.hourlyCostOverride ? Number(d.hourlyCostOverride) : null,
       },
     });
     // La cuenta de acceso sigue al empleado a su nuevo centro.

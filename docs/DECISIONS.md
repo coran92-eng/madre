@@ -122,14 +122,35 @@ Pendiente en despliegue (no es código):
   ventas (neto de cierres de caja) vs. horas trabajadas/planificadas →
   productividad (ventas por hora), horas extra, propinas, absentismo, rotación
   (altas/bajas) y empleados activos, con tendencia de 6 meses. Sin esquema nuevo.
-  El coste de personal en € requiere salarios (hoy las nóminas son PDF); se usa
-  la productividad como proxy estándar.
+  El coste real de personal en € se calcula a partir de un coste/hora
+  configurable por local (`defaultHourlyCost`, por defecto) con override por
+  empleado (`hourlyCostOverride`) — mismo patrón que `vacationDaysOverride` — y
+  se aplica a las horas realmente fichadas. Si no hay coste/hora configurado, o
+  el superadmin está viendo "todos los locales" a la vez, el panel muestra
+  "sin configurar" en vez de una cifra engañosa; no rompe el render.
 - **Onboarding de altas** (`/onboarding`): plantilla de incorporación configurable
   y progreso por empleado (contrato, uniformidad, PIN, lectura del manual,
   formación…), gestionable por el admin.
 - **Formación + PRL** (`/training`): cursos con validez configurable y registro de
   formación completada con certificado; las renovaciones (manipulador, alérgenos,
   PRL…) se integran en las alertas de caducidad (`/alerts` + dashboard).
+
+**Seguridad de accesos**
+- **Anti fuerza bruta + bloqueo temporal**: 5 intentos fallidos de login
+  bloquean la cuenta 15 minutos (`User.failedLoginCount`/`lockedUntil`); con la
+  cuenta bloqueada no se llega a comprobar la contraseña (evita dar pistas por
+  timing). Contador a 0 tras login correcto.
+- **Límite de recuperación de contraseña**: máximo 3 solicitudes por email en
+  15 minutos (contadas sobre `AuditLog`, sin estado en memoria — necesario
+  porque el runtime serverless no comparte memoria entre invocaciones), con la
+  misma respuesta genérica de siempre (no revela si el email existe).
+- **2FA (TOTP) opcional**: activable por cada usuario desde *Mi cuenta*
+  (`otplib` + QR + 8 códigos de respaldo de un solo uso, hasheados con bcrypt).
+  Al iniciar sesión con 2FA activo, la `Session` se crea con
+  `twoFactorVerified=false` y `getCurrentUser()` la trata como no autenticada
+  hasta pasar por `/login/verify-2fa` (código TOTP o código de respaldo).
+- **Cabeceras de seguridad HTTP** (`next.config.mjs`): `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`.
 
 **Pendiente REAL (no es código de la app)**
 - **Infra de producción**: hosting bajo control de la propiedad, HTTPS, cifrado en

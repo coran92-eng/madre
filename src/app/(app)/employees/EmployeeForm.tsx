@@ -23,6 +23,7 @@ type Employee = {
   trialEndDate: string | null;
   status: string;
   vacationDaysOverride: number | null;
+  hourlyCostOverride: number | null;
 };
 
 function Submit({ label }: { label: string }) {
@@ -109,6 +110,7 @@ export default function EmployeeForm({
             </select>
           </div>
           <Field name="vacationDaysOverride" label="Días vacaciones (override)" type="number" defaultValue={e?.vacationDaysOverride != null ? String(e.vacationDaysOverride) : ""} />
+          <Field name="hourlyCostOverride" label="Coste/hora (€, opcional)" type="number" step="0.01" defaultValue={e?.hourlyCostOverride != null ? String(e.hourlyCostOverride) : ""} />
         </div>
       </fieldset>
 

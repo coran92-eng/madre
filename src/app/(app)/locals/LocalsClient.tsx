@@ -18,9 +18,15 @@ export function CreateLocalForm() {
         <div><label className="label">Código</label><input name="code" className="input" placeholder="SBCN" required /></div>
         <div className="sm:col-span-2"><label className="label">Nombre</label><input name="name" className="input" placeholder="La Sastrería Barcelona" required /></div>
       </div>
-      <div className="max-w-[12rem]">
-        <label className="label">Aviso caducidades (días)</label>
-        <input name="alertLeadDays" type="number" className="input" defaultValue={30} />
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div className="max-w-[12rem]">
+          <label className="label">Aviso caducidades (días)</label>
+          <input name="alertLeadDays" type="number" className="input" defaultValue={30} />
+        </div>
+        <div className="max-w-[12rem]">
+          <label className="label">Coste/hora por defecto (€, opcional)</label>
+          <input name="defaultHourlyCost" type="number" step="0.01" className="input" />
+        </div>
       </div>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       {state.ok && <p className="text-sm text-green-700">Local creado.</p>}
@@ -29,7 +35,7 @@ export function CreateLocalForm() {
   );
 }
 
-export function EditLocalRow({ local }: { local: { id: string; code: string; name: string; alertLeadDays: number; active: boolean } }) {
+export function EditLocalRow({ local }: { local: { id: string; code: string; name: string; alertLeadDays: number; defaultHourlyCost: number | null; active: boolean } }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const [state, action] = useFormState(updateLocal.bind(null, local.id), {});
@@ -54,6 +60,7 @@ export function EditLocalRow({ local }: { local: { id: string; code: string; nam
           <div className="sm:col-span-2"><label className="label">Nombre</label><input name="name" className="input" defaultValue={local.name} required /></div>
           <input type="hidden" name="code" value={local.code} />
           <div><label className="label">Aviso (días)</label><input name="alertLeadDays" type="number" className="input" defaultValue={local.alertLeadDays} /></div>
+          <div><label className="label">Coste/hora (€, opcional)</label><input name="defaultHourlyCost" type="number" step="0.01" className="input" defaultValue={local.defaultHourlyCost ?? ""} /></div>
           <Sub label="Guardar" />
           {state.ok && <p className="text-xs text-green-700 sm:col-span-4">Guardado.</p>}
           {state.error && <p className="text-xs text-red-600 sm:col-span-4">{state.error}</p>}

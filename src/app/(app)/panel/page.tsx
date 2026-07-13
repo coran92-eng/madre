@@ -36,6 +36,22 @@ export default async function PanelPage({ searchParams }: { searchParams: { mont
         <Stat label="Ventas por hora" value={eur(c.salesPerHour)} hint="productividad" />
         <Stat label="Horas trabajadas" value={`${c.workedHours} h`} hint={`planificadas: ${c.plannedHours} h`} />
         <Stat label="Horas extra" value={`${c.overtimeHours} h`} hint="trabajadas − planificadas" />
+        <Stat
+          label="Coste de personal"
+          value={c.laborCost != null ? eur(c.laborCost) : "sin configurar"}
+          hint="coste real (€/h × horas)"
+        />
+        <Stat
+          label="% sobre ventas"
+          value={
+            c.laborCostPct != null ? (
+              <span className={c.laborCostPct > 35 ? "text-red-600" : "text-green-700"}>{c.laborCostPct}%</span>
+            ) : (
+              "—"
+            )
+          }
+          hint="coste de personal / ventas"
+        />
         <Stat label="Propinas" value={eur(c.tips)} />
         <Stat label="Absentismo" value={`${c.absenceDays} d`} hint="días de ausencia aprobada" />
         <Stat label="Altas / bajas" value={`${c.hires} / ${c.terminations}`} hint="rotación del mes" />
@@ -54,8 +70,9 @@ export default async function PanelPage({ searchParams }: { searchParams: { mont
       </div>
 
       <p className="text-xs text-stone-400 mt-4">
-        El coste de personal en € requiere los salarios (hoy las nóminas son PDF). Como proxy estándar
-        se usa la productividad (ventas por hora trabajada). Las ventas se estiman del cierre de caja.
+        El coste de personal se calcula si configuras el coste/hora por empleado o por local
+        (Empleados → ficha del empleado, o Locales → editar). Sin configurar, esta métrica queda vacía.
+        Las ventas se estiman del cierre de caja.
       </p>
     </>
   );

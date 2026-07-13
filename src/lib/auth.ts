@@ -60,7 +60,7 @@ function clientIp(): string | null {
   );
 }
 
-export async function createSession(userId: string): Promise<void> {
+export async function createSession(userId: string, opts?: { twoFactorVerified?: boolean }): Promise<void> {
   const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000);
   const h = headers();
   const session = await prisma.session.create({
@@ -69,6 +69,7 @@ export async function createSession(userId: string): Promise<void> {
       expiresAt,
       ip: clientIp(),
       userAgent: h.get("user-agent") ?? null,
+      twoFactorVerified: opts?.twoFactorVerified ?? true,
     },
   });
   cookies().set(COOKIE, sign(session.id), {
@@ -104,6 +105,9 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     await prisma.session.deleteMany({ where: { id } });
     return null;
   }
+  // Sesión creada pero pendiente de completar la verificación 2FA: no cuenta
+  // como autenticada para el resto de la app.
+  if (!session.twoFactorVerified) return null;
   const { user } = session;
   return {
     id: user.id,
@@ -113,6 +117,28 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     active: user.active,
     mustChangePassword: user.mustChangePassword,
   };
+}
+
+/**
+ * Igual que getCurrentUser, pero solo devuelve la sesión cuando está a medio
+ * autenticar (creada, pero con twoFactorVerified=false). La usa la página de
+ * verificación de 2FA para saber a quién pertenece la sesión pendiente sin
+ * que eso cuente como login completo.
+ */
+export async function getPendingTwoFactorSession() {
+  const id = unsign(cookies().get(COOKIE)?.value);
+  if (!id) return null;
+  const session = await prisma.session.findUnique({
+    where: { id },
+    include: { user: true },
+  });
+  if (!session) return null;
+  if (session.expiresAt < new Date() || !session.user.active) {
+    await prisma.session.deleteMany({ where: { id } });
+    return null;
+  }
+  if (session.twoFactorVerified) return null;
+  return session;
 }
 
 export class AuthError extends Error {}

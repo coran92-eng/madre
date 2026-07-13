@@ -1,13 +1,17 @@
 import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { ROLE_LABELS } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui";
 import AccountForm from "./AccountForm";
 import PushManager from "./PushManager";
+import TwoFactorManager from "./TwoFactorManager";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
   const user = await requireUser();
+  const fullUser = await prisma.user.findUnique({ where: { id: user.id }, select: { totpEnabled: true } });
+
   return (
     <>
       <PageHeader title="Mi cuenta" subtitle={`${user.email} · ${ROLE_LABELS[user.role]}`} />
@@ -22,6 +26,9 @@ export default async function AccountPage() {
         </p>
         <PushManager />
       </div>
+
+      <h2 className="font-semibold mb-3 mt-8">Verificación en dos pasos</h2>
+      <TwoFactorManager initialEnabled={fullUser?.totpEnabled ?? false} />
     </>
   );
 }

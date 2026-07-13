@@ -87,6 +87,16 @@ soft-delete para conservar el histórico 4 años.
 | Onboarding de altas: plantilla de incorporación configurable + progreso por empleado | ✅ |
 | Formación + PRL: cursos con validez y renovaciones que entran en las alertas de caducidad | ✅ |
 
+**Seguridad de accesos y coste real:**
+
+| Función | Estado |
+|---|---|
+| Bloqueo de cuenta tras 5 intentos fallidos de login (15 min) | ✅ |
+| Límite de solicitudes de recuperación de contraseña (3 / 15 min) | ✅ |
+| 2FA opcional (TOTP + códigos de respaldo de un solo uso), activable desde *Mi cuenta* | ✅ |
+| Cabeceras de seguridad HTTP (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`) | ✅ |
+| Coste real de personal en el Panel de dirección: coste/hora por local (por defecto) y por empleado (override), € y % sobre ventas | ✅ |
+
 Lo único pendiente es **infra de producción** y **decisiones de la propiedad** — ver `docs/DECISIONS.md`.
 
 > **Fichaje (tablet):** ruta `/kiosk` sin login, protegida por PIN individual

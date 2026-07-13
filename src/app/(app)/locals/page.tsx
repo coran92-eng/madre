@@ -18,7 +18,7 @@ export default async function LocalsPage() {
       <div className="mb-6"><CreateLocalForm /></div>
       <div className="card divide-y divide-stone-100">
         {locals.map((l) => (
-          <EditLocalRow key={l.id} local={{ id: l.id, code: l.code, name: l.name, alertLeadDays: l.alertLeadDays, active: l.active }} />
+          <EditLocalRow key={l.id} local={{ id: l.id, code: l.code, name: l.name, alertLeadDays: l.alertLeadDays, defaultHourlyCost: l.defaultHourlyCost, active: l.active }} />
         ))}
       </div>
       <p className="text-xs text-stone-400 mt-3">

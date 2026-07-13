@@ -97,6 +97,7 @@ export default async function EmployeeDetail({ params }: { params: { id: string 
               trialEndDate: toInput(e.trialEndDate),
               status: e.status,
               vacationDaysOverride: e.vacationDaysOverride,
+              hourlyCostOverride: e.hourlyCostOverride,
             }}
           />
         </section>

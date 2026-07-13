@@ -22,3 +22,8 @@ export function overlapDays(aStart: Date, aEnd: Date, mStart: Date, mEnd: Date):
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+/** Coste/hora efectivo de un empleado: su override, o si no tiene, el del local. */
+export function effectiveHourlyCost(employeeOverride: number | null, localDefault: number | null): number | null {
+  return employeeOverride ?? localDefault ?? null;
+}

@@ -23,6 +23,15 @@ export async function requestPasswordReset(
   const email = parsed.data.email.toLowerCase();
   const user = await prisma.user.findUnique({ where: { email } });
   if (user && user.active) {
+    const recentRequests = await prisma.auditLog.count({
+      where: {
+        action: "auth.reset.request",
+        actorEmail: email,
+        createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+      },
+    });
+    if (recentRequests >= 3) return GENERIC;
+
     const token = randomBytes(32).toString("hex");
     await prisma.user.update({
       where: { id: user.id },

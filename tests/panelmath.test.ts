@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { netSales, salesPerHour, overlapDays, round2 } from "@/lib/panelmath";
+import { netSales, salesPerHour, overlapDays, round2, effectiveHourlyCost } from "@/lib/panelmath";
 
 describe("panel de dirección · math", () => {
   it("net sales = counted cash − float + card + other", () => {
@@ -27,5 +27,14 @@ describe("panel de dirección · math", () => {
   it("round2", () => {
     expect(round2(30.005)).toBe(30.01);
     expect(round2(90 / 3)).toBe(30);
+  });
+
+  it("effective hourly cost: override propio, herencia del local, o sin configurar", () => {
+    // empleado con override propio → gana el override
+    expect(effectiveHourlyCost(15, 12)).toBe(15);
+    // empleado sin override → hereda el del local
+    expect(effectiveHourlyCost(null, 12)).toBe(12);
+    // ninguno de los dos configurado → null
+    expect(effectiveHourlyCost(null, null)).toBeNull();
   });
 });

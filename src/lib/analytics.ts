@@ -3,7 +3,7 @@ import { prisma } from "./db";
 import type { SessionUser } from "./auth";
 import { getListScope } from "./localcontext";
 import { monthRange } from "./timeclock";
-import { netSales, salesPerHour, overlapDays, round2 } from "./panelmath";
+import { netSales, salesPerHour, overlapDays, round2, effectiveHourlyCost } from "./panelmath";
 
 export type MonthMetrics = {
   year: number;
@@ -18,6 +18,8 @@ export type MonthMetrics = {
   hires: number;
   terminations: number;
   activeEmployees: number;
+  laborCost: number | null; // coste real de personal (€), null si no hay coste/hora configurado
+  laborCostPct: number | null; // laborCost / sales * 100, null si no se puede calcular
 };
 
 async function metricsFor(scope: { localId?: string }, year: number, month: number): Promise<MonthMetrics> {
@@ -25,7 +27,7 @@ async function metricsFor(scope: { localId?: string }, year: number, month: numb
 
   const [closes, entries, shifts, tipsAgg, absences, hires, terminations, activeEmployees] = await Promise.all([
     prisma.cashClose.findMany({ where: { ...scope, businessDate: { gte: start, lt: end } }, select: { cashCounted: true, openingFloat: true, cardTotal: true, otherTotal: true } }),
-    prisma.timeEntry.findMany({ where: { ...scope, clockIn: { gte: start, lt: end }, clockOut: { not: null } }, select: { clockIn: true, clockOut: true } }),
+    prisma.timeEntry.findMany({ where: { ...scope, clockIn: { gte: start, lt: end }, clockOut: { not: null } }, select: { clockIn: true, clockOut: true, employeeId: true } }),
     prisma.shift.findMany({ where: { ...scope, date: { gte: start, lt: end } }, select: { startTime: true, endTime: true } }),
     prisma.tipPool.aggregate({ where: { ...scope, businessDate: { gte: start, lt: end } }, _sum: { totalAmount: true } }),
     prisma.absence.findMany({ where: { ...scope, status: "APROBADA", startDate: { lt: end }, endDate: { gte: start } }, select: { startDate: true, endDate: true } }),
@@ -44,6 +46,34 @@ async function metricsFor(scope: { localId?: string }, year: number, month: numb
   const lastDayOfMonth = new Date(end.getTime() - 86400000);
   const absenceDays = absences.reduce((a, x) => a + overlapDays(x.startDate, x.endDate, start, lastDayOfMonth), 0);
 
+  // Coste real de personal: solo se calcula si hay un local concreto en el scope
+  // (si es un superadmin viendo "todos los locales", no hay un defaultHourlyCost
+  // único al que recurrir, así que dejamos laborCost en null para no dar cifras
+  // engañosas — mantenerlo simple antes que exhaustivo).
+  let laborCost: number | null = null;
+  if (scope.localId && entries.length > 0) {
+    const [local, employees] = await Promise.all([
+      prisma.local.findUnique({ where: { id: scope.localId }, select: { defaultHourlyCost: true } }),
+      prisma.employee.findMany({
+        where: { id: { in: Array.from(new Set(entries.map((e) => e.employeeId))) } },
+        select: { id: true, hourlyCostOverride: true },
+      }),
+    ]);
+    const localDefault = local?.defaultHourlyCost ?? null;
+    const costByEmployee = new Map(employees.map((e) => [e.id, effectiveHourlyCost(e.hourlyCostOverride, localDefault)]));
+
+    let total = 0;
+    let any = false;
+    for (const e of entries) {
+      const cost = costByEmployee.get(e.employeeId);
+      if (cost == null) continue;
+      const mins = Math.max(0, Math.round((e.clockOut!.getTime() - e.clockIn.getTime()) / 60000));
+      total += (mins * cost) / 60;
+      any = true;
+    }
+    laborCost = any ? round2(total) : null;
+  }
+
   return {
     year, month,
     sales,
@@ -56,6 +86,8 @@ async function metricsFor(scope: { localId?: string }, year: number, month: numb
     hires,
     terminations,
     activeEmployees,
+    laborCost,
+    laborCostPct: laborCost != null && sales > 0 ? round2((laborCost / sales) * 100) : null,
   };
 }
 

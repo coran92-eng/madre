@@ -22,17 +22,39 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
   // Mensaje genérico para no revelar si el email existe.
   const invalid: LoginState = { error: "Credenciales incorrectas." };
+  const locked: LoginState = { error: "Demasiados intentos. Inténtalo de nuevo en unos minutos." };
   if (!user || !user.active) {
     await audit({ action: "auth.login.fail", entity: "User", detail: { email }, ip: clientIp() });
     return invalid;
   }
+
+  // Cuenta bloqueada temporalmente por intentos fallidos: no verifiques la
+  // contraseña (evita dar pistas por timing) y corta aquí.
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    await audit({ actorEmail: email, action: "auth.login.blocked", entity: "User", entityId: user.id, ip: clientIp() });
+    return locked;
+  }
+
   const ok = await verifyPassword(parsed.data.password, user.passwordHash);
   if (!ok) {
+    const failedCount = user.failedLoginCount + 1;
+    if (failedCount >= 5) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: 0, lockedUntil: new Date(Date.now() + 15 * 60 * 1000) },
+      });
+    } else {
+      await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: failedCount } });
+    }
     await audit({ actorEmail: email, action: "auth.login.fail", entity: "User", entityId: user.id, ip: clientIp() });
     return invalid;
   }
 
-  await createSession(user.id);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { failedLoginCount: 0, lockedUntil: null },
+  });
+
   await audit({
     actorId: user.id,
     actorEmail: user.email,
@@ -42,5 +64,12 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     entityId: user.id,
     ip: clientIp(),
   });
+
+  if (user.totpEnabled) {
+    await createSession(user.id, { twoFactorVerified: false });
+    redirect("/login/verify-2fa");
+  }
+
+  await createSession(user.id);
   redirect("/dashboard");
 }
