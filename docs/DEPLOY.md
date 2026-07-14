@@ -53,6 +53,34 @@ de datos responde — así se ve la causa real en vez del error genérico.
 | `SMTP_URL`, `MAIL_FROM` | No | Sin ellas, los emails se registran en los logs de función en vez de enviarse |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_SUBJECT` | No | Sin ellas, las notificaciones push quedan desactivadas (el email sigue funcionando) |
 
+## Configurar el envío real de email (SMTP)
+
+Sin `SMTP_URL`, todos los emails de MADRE (credenciales al dar acceso,
+recuperación de contraseña, avisos de vacaciones/ausencias/turnos...) se
+quedan en los logs de la función de Netlify en vez de llegar a la bandeja.
+Pasos con [Brevo](https://www.brevo.com) (antes Sendinblue; sede en Francia,
+encaja con el requisito de RGPD del spec, 300 emails/día gratis):
+
+1. Crea una cuenta gratuita en Brevo.
+2. **Settings → SMTP & API → pestaña SMTP**: apunta el host
+   (`smtp-relay.brevo.com`), el puerto (`587`), el login, y genera una
+   **SMTP key** nueva (botón "Generate a new SMTP key") — es distinta a la
+   contraseña de la cuenta y solo se muestra una vez.
+3. **Senders, Domains & Dedicated IPs → Senders**: añade y valida la
+   dirección que quieras usar como remitente (p. ej.
+   `no-reply@cortedemanga.es`) — Brevo manda un email de confirmación a esa
+   bandeja.
+4. En Netlify (**Site settings → Environment variables**) añade:
+   - `SMTP_URL` = `smtp://LOGIN:SMTP_KEY@smtp-relay.brevo.com:587`
+   - `MAIL_FROM` = `MADRE <no-reply@cortedemanga.es>`
+5. **Deploys → Trigger deploy → Clear cache and deploy** (las variables
+   nuevas no se aplican a un build ya hecho).
+6. Verifica en `/api/health` que `SMTP_URL` aparece como "configurada", y
+   prueba dando acceso a un empleado o con "olvidé mi contraseña".
+
+Cualquier otro proveedor SMTP (Mailjet, SES, Postmark...) funciona igual:
+solo cambia el host/puerto/credenciales de `SMTP_URL`.
+
 ## Almacenamiento de documentos en Netlify
 
 Netlify Functions tiene el disco de solo lectura (salvo `/tmp`, que se borra
