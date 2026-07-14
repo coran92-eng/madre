@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { getListScope } from "@/lib/localcontext";
+import { getListScope, getActiveLocalId } from "@/lib/localcontext";
 import { PageHeader, StatusBadge, EmptyState, fmtDate } from "@/components/ui";
+import DangerZone from "./DangerZone";
 
 export default async function EmployeesPage({
   searchParams,
@@ -18,6 +19,20 @@ export default async function EmployeesPage({
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: { local: true, user: { select: { id: true } } },
   });
+
+  let dangerZone = null;
+  if (user.role === "SUPERADMIN") {
+    const activeLocalId = await getActiveLocalId(user);
+    if (activeLocalId) {
+      const [local, total] = await Promise.all([
+        prisma.local.findUnique({ where: { id: activeLocalId }, select: { name: true } }),
+        prisma.employee.count({ where: { localId: activeLocalId } }),
+      ]);
+      if (local && total > 0) {
+        dangerZone = <DangerZone localId={activeLocalId} localName={local.name} count={total} />;
+      }
+    }
+  }
 
   return (
     <>
@@ -82,6 +97,8 @@ export default async function EmployeesPage({
           </table>
         </div>
       )}
+
+      {dangerZone}
     </>
   );
 }

@@ -196,6 +196,28 @@ Pendiente en despliegue (no es código):
   más abajo) cualquier ruta pública nueva lo declara sin dar por hecho que
   Next.js la detecte sola como dinámica.
 
+**Reinicio total de personal (herramienta de pruebas)**
+- Motivo: mientras se prueba la plataforma antes de usarla de verdad, hace
+  falta poder vaciar los empleados de un local sin rehacer toda la
+  configuración (locales, año de vacaciones, semanas bloqueadas, plantillas
+  de checklist/APPCC/onboarding, cursos) cada vez.
+- Al auditar la función de purga individual (`purgeEmployee`, ARCO/RGPD
+  spec §5) para reutilizarla en bucle, se encontró que estaba desactualizada:
+  no cubría `ShiftLogRead`, `TipShare`, `OnboardingCheck` ni
+  `CourseCompletion` (tablas añadidas en fases posteriores). No llegaban a
+  romper el borrado (esas columnas `employeeId` no tienen `@relation` real,
+  así que Postgres no lo bloquea), pero dejaban filas huérfanas — un fallo
+  real de la purga RGPD, no solo del reinicio. Se extrajo la lista completa
+  a `deleteEmployeeCascade()`, ahora compartida por `purgeEmployee` y
+  `purgeAllEmployees`.
+- `purgeAllEmployees` (solo superadmin): borra todos los empleados del local
+  activo (activos o no) y las solicitudes de autorregistro, exige escribir
+  "BORRAR" en un campo de texto antes de habilitar el botón, y vive en una
+  sección "Zona de peligro" plegada en `/employees`. Verificado en local: 3
+  empleados con fichajes, vacaciones (semana + día suelto) y una cuenta cada
+  uno quedan en 0 tras un clic, sin errores de clave foránea, con los 3
+  locales, el año de vacaciones y las plantillas intactos.
+
 **Pendiente REAL (no es código de la app)**
 - **Infra de producción**: hosting bajo control de la propiedad, HTTPS, cifrado en
   reposo, backups diarios + prueba de restauración, DPA art. 28, dominio, y

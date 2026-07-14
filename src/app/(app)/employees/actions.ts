@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireRole, auditContext, hashPassword, verifyPassword, generatePassword } from "@/lib/auth";
 import { deleteFile } from "@/lib/storage";
@@ -293,6 +294,61 @@ export async function resolveExpiry(id: string): Promise<void> {
   revalidatePath(`/employees/${exp.employeeId}`);
 }
 
+type PurgeTx = Prisma.TransactionClient;
+
+/**
+ * Borra TODO lo que cuelga de un empleado (todas las tablas que lo
+ * referencian, spec §5) dentro de una transacción, y finalmente el propio
+ * Employee y su User. No borra Local/VacationYear/plantillas — eso es
+ * configuración, no datos de la persona. Los archivos (documentos,
+ * incidencias, justificantes, certificados de formación) se borran antes,
+ * fuera de la transacción (best-effort, `deleteFile` nunca lanza).
+ */
+async function deleteEmployeeCascade(tx: PurgeTx, id: string, userId: string | null): Promise<void> {
+  await tx.vacationAdjustment.deleteMany({ where: { employeeId: id } });
+  await tx.vacationRequest.deleteMany({ where: { employeeId: id } }); // cascades weeks + days
+  await tx.shift.deleteMany({ where: { employeeId: id } });
+  await tx.documentAck.deleteMany({ where: { employeeId: id } });
+  await tx.document.deleteMany({ where: { employeeId: id } });
+  await tx.timeEntry.deleteMany({ where: { employeeId: id } }); // cascades corrections
+  await tx.absence.deleteMany({ where: { employeeId: id } });
+  await tx.incident.deleteMany({ where: { employeeId: id } });
+  await tx.expiry.deleteMany({ where: { employeeId: id } });
+  await tx.manualRead.deleteMany({ where: { employeeId: id } });
+  await tx.announcementRead.deleteMany({ where: { employeeId: id } });
+  await tx.shiftSwap.deleteMany({ where: { OR: [{ requestedById: id }, { targetEmployeeId: id }] } });
+  await tx.shiftLogRead.deleteMany({ where: { employeeId: id } });
+  await tx.tipShare.deleteMany({ where: { employeeId: id } });
+  await tx.onboardingCheck.deleteMany({ where: { employeeId: id } });
+  await tx.courseCompletion.deleteMany({ where: { employeeId: id } });
+  await tx.employee.delete({ where: { id } });
+  if (userId) {
+    await tx.session.deleteMany({ where: { userId } });
+    await tx.user.delete({ where: { id: userId } });
+  }
+}
+
+async function employeeFileKeys(id: string): Promise<string[]> {
+  const [emp, courseCompletions] = await Promise.all([
+    prisma.employee.findUnique({
+      where: { id },
+      select: {
+        documents: { select: { storageKey: true } },
+        incidents: { select: { storageKey: true } },
+        absences: { select: { justStorageKey: true } },
+      },
+    }),
+    prisma.courseCompletion.findMany({ where: { employeeId: id }, select: { storageKey: true } }),
+  ]);
+  if (!emp) return [];
+  return [
+    ...emp.documents.map((d) => d.storageKey),
+    ...emp.incidents.map((i) => i.storageKey),
+    ...emp.absences.map((a) => a.justStorageKey),
+    ...courseCompletions.map((c) => c.storageKey),
+  ].filter((k): k is string => !!k);
+}
+
 /**
  * ARCO / retención (§5): borrado DEFINITIVO de un exempleado y todos sus datos,
  * incluidos los archivos. Solo superadmin y solo sobre empleados ya dados de
@@ -300,47 +356,48 @@ export async function resolveExpiry(id: string): Promise<void> {
  */
 export async function purgeEmployee(id: string): Promise<void> {
   const user = await requireRole("SUPERADMIN");
-  const emp = await prisma.employee.findUnique({
-    where: { id },
-    include: {
-      documents: { select: { storageKey: true } },
-      incidents: { select: { storageKey: true } },
-      absences: { select: { justStorageKey: true } },
-    },
-  });
+  const emp = await prisma.employee.findUnique({ where: { id } });
   if (!emp) throw new Error("Empleado no encontrado.");
   if (!emp.deletedAt) throw new Error("Da de baja al empleado antes de borrarlo definitivamente.");
 
-  // Remove stored files first (best-effort).
-  const keys = [
-    ...emp.documents.map((d) => d.storageKey),
-    ...emp.incidents.map((i) => i.storageKey),
-    ...emp.absences.map((a) => a.justStorageKey),
-  ].filter((k): k is string => !!k);
+  const keys = await employeeFileKeys(id);
   for (const k of keys) await deleteFile(k);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.vacationAdjustment.deleteMany({ where: { employeeId: id } });
-    await tx.vacationRequest.deleteMany({ where: { employeeId: id } }); // cascades weeks
-    await tx.shift.deleteMany({ where: { employeeId: id } });
-    await tx.documentAck.deleteMany({ where: { employeeId: id } });
-    await tx.document.deleteMany({ where: { employeeId: id } });
-    await tx.timeEntry.deleteMany({ where: { employeeId: id } }); // cascades corrections
-    await tx.absence.deleteMany({ where: { employeeId: id } });
-    await tx.incident.deleteMany({ where: { employeeId: id } });
-    await tx.expiry.deleteMany({ where: { employeeId: id } });
-    await tx.manualRead.deleteMany({ where: { employeeId: id } });
-    await tx.announcementRead.deleteMany({ where: { employeeId: id } });
-    await tx.shiftSwap.deleteMany({ where: { OR: [{ requestedById: id }, { targetEmployeeId: id }] } });
-    const userId = emp.userId;
-    await tx.employee.delete({ where: { id } });
-    if (userId) {
-      await tx.session.deleteMany({ where: { userId } });
-      await tx.user.delete({ where: { id: userId } });
-    }
-  });
+  await prisma.$transaction((tx) => deleteEmployeeCascade(tx, id, emp.userId));
 
   await audit({ ...auditContext(user), localId: emp.localId, action: "arco.purge", entity: "Employee", entityId: id, detail: { name: `${emp.firstName} ${emp.lastName}`, files: keys.length } });
   revalidatePath("/employees");
   redirect("/employees");
+}
+
+/**
+ * Reinicio total de personal (herramienta de pruebas, solo superadmin):
+ * borra TODOS los empleados del local (activos o no) y sus datos, y las
+ * solicitudes de autorregistro pendientes o decididas. NO toca la
+ * configuración (local, año de vacaciones, semanas bloqueadas, plantillas de
+ * checklist/APPCC/onboarding, cursos) para no tener que rehacerla.
+ * Irreversible — pensado para limpiar datos de prueba, no para uso normal.
+ */
+export async function purgeAllEmployees(localId: string, confirm: string): Promise<{ error?: string; ok?: boolean; count?: number }> {
+  const user = await requireRole("SUPERADMIN");
+  if (confirm !== "BORRAR") return { error: 'Escribe "BORRAR" para confirmar.' };
+  if (!canAccessLocal(user, localId)) return { error: "Sin permiso sobre ese local." };
+
+  const employees = await prisma.employee.findMany({ where: { localId }, select: { id: true, userId: true } });
+  for (const emp of employees) {
+    const keys = await employeeFileKeys(emp.id);
+    for (const k of keys) await deleteFile(k);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (const emp of employees) {
+      await deleteEmployeeCascade(tx, emp.id, emp.userId);
+    }
+    await tx.employeeRegistration.deleteMany({ where: { localId } });
+  });
+
+  await audit({ ...auditContext(user), localId, action: "arco.purge_all", entity: "Employee", detail: { count: employees.length } });
+  revalidatePath("/employees");
+  revalidatePath("/employees/registrations");
+  return { ok: true, count: employees.length };
 }
