@@ -2,12 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireRole, auditContext, hashPassword, generatePassword } from "@/lib/auth";
 import { deleteFile } from "@/lib/storage";
 import { canAccessLocal } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
+import { notify } from "@/lib/notify";
 
 const employeeSchema = z.object({
   localId: z.string().min(1),
@@ -179,7 +181,8 @@ export async function reactivateEmployee(id: string) {
 
 /**
  * Provision a login for an employee. Returns a one-time temporary password to
- * display to the admin (never stored in plaintext).
+ * display to the admin (never stored in plaintext), and also emails it to the
+ * employee so they don't depend on the admin handing it over in person.
  */
 export async function provisionAccess(id: string, role: "EMPLEADO" | "ENCARGADO"): Promise<{ error?: string; password?: string; email?: string }> {
   const user = await requireRole("SUPERADMIN", "ENCARGADO");
@@ -206,6 +209,18 @@ export async function provisionAccess(id: string, role: "EMPLEADO" | "ENCARGADO"
   });
 
   await audit({ ...auditContext(user), localId: emp.localId, action: "employee.provision_access", entity: "User", entityId: created.id, detail: { role } });
+
+  const h = headers();
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const host = h.get("host") ?? "localhost:3000";
+  const loginUrl = `${proto}://${host}/login`;
+  await notify(
+    emp.email,
+    "Acceso creado",
+    `Hola ${emp.firstName},\n\nYa tienes acceso a MADRE.\n\nEmail: ${emp.email}\nContraseña temporal: ${tempPassword}\n\nEntra en ${loginUrl} y te pedirá cambiarla en el primer acceso.`,
+    loginUrl
+  );
+
   revalidatePath(`/employees/${id}`);
   return { password: tempPassword, email: emp.email };
 }
