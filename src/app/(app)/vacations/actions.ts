@@ -82,6 +82,40 @@ export async function requestVacation(
 
   // Re-validate availability server-side (anti-overlap + blocked).
   const allDates = [...cleanWeeks.flatMap((w) => isoWeekDays(year, w)), ...cleanDays];
+
+  // No se pueden pedir fechas que ya han pasado. "Hoy" se calcula en la zona
+  // del negocio (Europe/Madrid), no en UTC del servidor — en serverless el
+  // servidor corre en UTC y entre medianoche y la 1-2h española diría que
+  // "hoy" aún es ayer.
+  const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date());
+  const startOfToday = new Date(`${todayKey}T00:00:00.000Z`);
+  const pastDate = allDates.find((d) => d < startOfToday);
+  if (pastDate) {
+    return { error: `El día ${dateKey(pastDate)} ya ha pasado — solo se pueden pedir fechas a partir de hoy.` };
+  }
+
+  // Tampoco fechas que el propio empleado ya tenga pedidas o aprobadas en otra
+  // solicitud (con una pestaña desactualizada se podría enviar dos veces la
+  // misma semana; contra los demás ya protege el anti-solapamiento, pero
+  // contra uno mismo las pendientes no cuentan hasta que se aprueban).
+  const [ownWeeks, ownDays] = await Promise.all([
+    prisma.vacationWeek.findMany({
+      where: { year, request: { employeeId: employee.id, status: { in: ["PENDIENTE", "APROBADA"] } } },
+      select: { week: true },
+    }),
+    prisma.vacationDay.findMany({
+      where: { date: { in: allDates }, request: { employeeId: employee.id, status: { in: ["PENDIENTE", "APROBADA"] } } },
+      select: { date: true },
+    }),
+  ]);
+  const ownDateKeys = new Set([
+    ...ownWeeks.flatMap((w) => isoWeekDays(year, w.week).map(dateKey)),
+    ...ownDays.map((d) => dateKey(d.date)),
+  ]);
+  const ownDupe = allDates.map(dateKey).find((k) => ownDateKeys.has(k));
+  if (ownDupe) {
+    return { error: `Ya tienes el día ${ownDupe} en otra solicitud tuya (pendiente o aprobada).` };
+  }
   const [blockedWeeks, takenWeeks, takenDays] = await Promise.all([
     prisma.blockedWeek.findMany({ where: { localId: employee.localId, year } }),
     prisma.vacationWeek.findMany({ where: { localId: employee.localId, year, approvedKey: { not: null } } }),
@@ -136,19 +170,49 @@ export async function requestVacation(
     entityId: request.id,
     detail: { year, weeks: cleanWeeks, days: cleanDays.map(dateKey) },
   });
+
+  // Avisa a quien aprueba (superadmin + encargados del local) — sin esto
+  // tendrían que entrar a Aprobaciones por iniciativa propia.
+  const approvers = await prisma.user.findMany({
+    where: { active: true, OR: [{ role: "SUPERADMIN" }, { role: "ENCARGADO", localId: employee.localId }] },
+    select: { email: true },
+  });
+  const summary = [
+    cleanWeeks.length ? `semana${cleanWeeks.length === 1 ? "" : "s"} ${cleanWeeks.join(", ")}` : "",
+    cleanDays.length ? `${cleanDays.length} día(s) suelto(s)` : "",
+  ].filter(Boolean).join(" + ");
+  await Promise.all(
+    approvers
+      .filter((a) => a.email !== user.email) // si quien pide es también encargado, no se auto-avisa
+      .map((a) =>
+        notify(
+          a.email,
+          "Nueva solicitud de vacaciones",
+          `${employee.firstName} ${employee.lastName} ha solicitado ${requestedDays} día(s) de vacaciones (${summary}). Pendiente de aprobación.`,
+          "/vacations/approvals"
+        )
+      )
+  );
+
   revalidatePath("/vacations");
   return { ok: true };
 }
 
-export async function cancelVacation(requestId: string): Promise<void> {
+// Devuelve {error} en vez de lanzar: una excepción en una server action llega
+// al error boundary como "Algo ha ido mal" a página completa — para un botón
+// inline queremos el motivo junto al botón.
+export async function cancelVacation(requestId: string): Promise<{ error?: string; ok?: boolean }> {
   const user = await requireUser();
   const req = await prisma.vacationRequest.findUnique({ where: { id: requestId } });
-  if (!req) throw new Error("No encontrado.");
+  if (!req) return { error: "Solicitud no encontrada." };
   const employee = await currentEmployee(user.id);
   const isOwner = employee && req.employeeId === employee.id;
   const isAdmin = user.role === "SUPERADMIN" || user.role === "ENCARGADO";
-  if (!isOwner && !isAdmin) throw new Error("Sin permiso.");
-  if (req.status === "APROBADA" && !isAdmin) throw new Error("Ya aprobada: contacta con tu encargado.");
+  if (!isOwner && !isAdmin) return { error: "Sin permiso." };
+  if (req.status === "CANCELADA") return { ok: true }; // doble clic: ya está hecho
+  if (req.status === "RECHAZADA") return { error: "La solicitud ya fue rechazada." };
+  if (req.status === "APROBADA" && !isAdmin) return { error: "Ya está aprobada: pide a tu encargado que la cancele." };
+  const wasApproved = req.status === "APROBADA";
 
   await prisma.$transaction([
     // Free the weeks and days (clears approvedKey so the slots reopen).
@@ -157,8 +221,14 @@ export async function cancelVacation(requestId: string): Promise<void> {
     prisma.vacationRequest.update({ where: { id: requestId }, data: { status: "CANCELADA" } }),
   ]);
   await audit({ ...auditContext(user), localId: req.localId, action: "vacation.cancel", entity: "VacationRequest", entityId: requestId });
+  // Si un admin cancela unas vacaciones ya aprobadas, el empleado tiene que enterarse.
+  if (wasApproved && !isOwner) {
+    const emp = await prisma.employee.findUnique({ where: { id: req.employeeId }, select: { email: true } });
+    await notify(emp?.email, "Vacaciones canceladas", "Tus vacaciones aprobadas han sido canceladas por dirección. Habla con tu encargado si tienes dudas.");
+  }
   revalidatePath("/vacations");
   revalidatePath("/vacations/approvals");
+  return { ok: true };
 }
 
 // ── Admin: approve / reject ─────────────────────────────────────────────────

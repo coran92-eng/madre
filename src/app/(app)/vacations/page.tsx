@@ -108,8 +108,14 @@ async function EmployeeSection({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Stat label="Derecho anual" value={`${balance.entitlementDays} d`} hint={`devengado: ${balance.accruedDays} d`} />
         <Stat label="Disfrutados" value={`${balance.consumedDays} d`} />
-        <Stat label="Pendientes" value={`${balance.pendingDays} d`} />
-        <Stat label="Saldo" value={`${balance.balanceDays} d`} hint={balance.adjustmentDays ? `+${balance.adjustmentDays} bolsa` : undefined} />
+        <Stat label="Pendientes de aprobar" value={`${balance.pendingDays} d`} />
+        {/* Lo que de verdad puede pedir aún: saldo menos lo ya pendiente — el
+            mismo número que valida el botón de solicitar, para no confundir. */}
+        <Stat
+          label="Disponible"
+          value={`${balance.balanceDays - balance.pendingDays} d`}
+          hint={balance.adjustmentDays ? `incluye +${balance.adjustmentDays} d de bolsa` : undefined}
+        />
       </div>
 
       {!requestsOpen && (
@@ -170,9 +176,10 @@ async function EmployeeSection({
 function Legend() {
   const items = [
     ["bg-green-50 border-green-200", "Disponible"],
-    ["bg-madre-50 border-madre-600", "Tuyo"],
-    ["bg-stone-100 border-stone-200", "Ocupada"],
-    ["bg-amber-50 border-amber-200", "Bloqueada"],
+    ["bg-madre-50 border-madre-600 border-dashed", "Tuyo (pendiente)"],
+    ["bg-madre-50 border-madre-600", "Tuyo (aprobado)"],
+    ["bg-stone-100 border-stone-200", "Ocupado"],
+    ["bg-amber-50 border-amber-200", "Bloqueado"],
   ] as const;
   return (
     <div className="flex flex-wrap gap-3 mb-3 text-xs text-stone-600">

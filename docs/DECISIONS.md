@@ -236,6 +236,34 @@ Pendiente en despliegue (no es código):
   de enviar antes de llegar al servidor, que sigue siendo quien lo hace
   cumplir de verdad.
 
+**Vacaciones: revisión de errores + UX de empleado (auditoría del módulo)**
+- **Fechas pasadas**: no se pueden solicitar (validado en servidor con "hoy"
+  calculado en `Europe/Madrid` — en serverless el reloj va en UTC y entre
+  las 00:00 y la 01-02h española diría que aún es ayer). En el calendario los
+  días pasados salen atenuados y sin clic, y las semanas ya vencidas quedan
+  colapsadas tras un botón "Mostrar N semanas ya pasadas" — la lista empieza
+  en la semana actual.
+- **Duplicados propios**: el servidor rechaza fechas que el propio empleado ya
+  tenga en otra solicitud pendiente o aprobada (con una pestaña
+  desactualizada se podía enviar dos veces la misma semana; contra terceros
+  ya protegía el anti-solapamiento, contra uno mismo las pendientes no
+  cuentan hasta aprobarse).
+- **`cancelVacation` devuelve `{error}` en vez de lanzar**: una excepción en
+  una server action acaba en el error boundary como "Algo ha ido mal" a
+  página completa; ahora el motivo aparece junto al botón. Cancelar pide
+  confirmación (`confirm`) — en móvil un toque accidental liberaba las
+  fechas. Si un admin cancela unas vacaciones ya aprobadas, se notifica al
+  empleado.
+- **Aviso a quien aprueba**: al enviarse una solicitud se notifica a
+  superadmin + encargados del local (antes tenían que entrar a Aprobaciones
+  por iniciativa propia; el resto de módulos ya notificaba).
+- **UX**: el día de hoy lleva un anillo; los días "míos" pendientes se
+  distinguen de los aprobados con borde discontinuo (el hover no existe en
+  móvil); la barra de resumen + botón de solicitar es pegajosa al fondo de la
+  pantalla (antes quedaba tras 53 semanas de scroll); la tarjeta "Saldo" pasa
+  a "Disponible" = saldo − pendientes, el mismo número que valida el botón de
+  enviar (mostrar dos cifras distintas confundía).
+
 **Pendiente REAL (no es código de la app)**
 - **Infra de producción**: hosting bajo control de la propiedad, HTTPS, cifrado en
   reposo, backups diarios + prueba de restauración, DPA art. 28, dominio, y
