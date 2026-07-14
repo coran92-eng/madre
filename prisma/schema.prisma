@@ -257,6 +257,7 @@ model VacationRequest {
   updatedAt DateTime @updatedAt
 
   weeks VacationWeek[]
+  days  VacationDay[]
 
   @@index([localId, year, status])
   @@index([employeeId])
@@ -278,6 +279,25 @@ model VacationWeek {
   approvedKey String? @unique // = `${localId}:${year}:${week}` cuando la solicitud está aprobada
 
   @@index([localId, year, week])
+}
+
+// Días sueltos (spec: cuando los 30 días naturales no encajan en semanas
+// completas — p.ej. 4 semanas = 28 días + 2 días sueltos, o "días generados"
+// de la bolsa que se quieren coger de uno en uno). Mismo mecanismo de
+// anti-solapamiento ABSOLUTO que VacationWeek pero a nivel de día natural, en
+// vez de semana — un día aprobado (propio o dentro de una semana aprobada de
+// otro empleado) no puede volver a aprobarse para nadie más.
+model VacationDay {
+  id        String          @id @default(cuid())
+  requestId String
+  request   VacationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  localId   String
+  year      Int
+  date      DateTime // día natural (medianoche UTC)
+
+  approvedKey String? @unique // = `${localId}:${yyyy-mm-dd}` cuando la solicitud está aprobada
+
+  @@index([localId, date])
 }
 
 // Bolsa de días: ajustes manuales (festivos trabajados, días pendientes de devolución).

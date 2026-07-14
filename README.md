@@ -180,10 +180,19 @@ se aplica a nivel de base de datos e imprime el informe de capacidad.
 
 ## Cómo funciona el motor de vacaciones
 
-- **Anti-solapamiento ABSOLUTO** (`src/lib/vacations.ts`, `actions.ts`): al aprobar,
-  cada semana escribe una clave única `local:año:semana` en `VacationWeek.approvedKey`.
-  El índice `@unique` de la BD hace imposible que dos empleados tengan la misma
-  semana — incluso ante aprobaciones concurrentes (se captura el error `P2002`).
+- **Semanas completas o días sueltos**: el calendario compartido selecciona
+  semanas enteras (lunes-domingo, atajo "Semana completa") o días individuales
+  — útil cuando el derecho anual no encaja en semanas completas (p. ej. 30
+  días = 4 semanas + 2 sueltos) o para coger días de la bolsa de uno en uno.
+  Ambos modos conviven en la misma solicitud.
+- **Anti-solapamiento ABSOLUTO, día a día** (`src/lib/vacations.ts`, `actions.ts`):
+  al aprobar, cada semana escribe una clave única `local:año:semana`
+  (`VacationWeek.approvedKey`) y cada día suelto `local:fecha`
+  (`VacationDay.approvedKey`). Los índices `@unique` de la BD hacen imposible
+  que dos empleados tengan el mismo slot — incluso ante aprobaciones
+  concurrentes (`P2002`). El cruce entre granularidades (un día suelto que cae
+  dentro de una semana ya aprobada de otro empleado, o viceversa) se
+  comprueba con aislamiento `SERIALIZABLE` dentro de la misma transacción.
 - **Validador de capacidad** (`capacityCheck`): `nº empleados activos × semanas/persona`
   vs. `semanas del año − bloqueadas`. Avisa **antes** de abrir solicitudes.
 - **Semanas bloqueadas**: configurables por año desde el panel (temporada alta).

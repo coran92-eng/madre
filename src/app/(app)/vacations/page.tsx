@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isAdmin } from "@/lib/rbac";
-import { weekAvailability, getVacationYear, employeeBalance, capacityCheck } from "@/lib/vacations";
+import { calendarAvailability, getVacationYear, employeeBalance, capacityCheck, dateKey } from "@/lib/vacations";
 import { getActiveLocalId } from "@/lib/localcontext";
 import { PageHeader, Stat, StatusBadge, fmtDate } from "@/components/ui";
 import WeekCalendar from "./WeekCalendar";
@@ -22,7 +22,7 @@ export default async function VacationsPage({ searchParams }: { searchParams: { 
   const cfg = await getVacationYear(localId, year);
   const employee = await prisma.employee.findUnique({ where: { userId: user.id } });
 
-  const weeks = await weekAvailability(localId, year, employee?.id);
+  const weeks = await calendarAvailability(localId, year, employee?.id);
   const selectable = !!employee && !employee.deletedAt && !!cfg?.requestsOpen;
   const balance = employee && !employee.deletedAt ? await employeeBalance(employee.id, year) : null;
 
@@ -55,7 +55,9 @@ export default async function VacationsPage({ searchParams }: { searchParams: { 
       <section className="mt-8">
         <h2 className="font-semibold mb-1">Calendario compartido</h2>
         <p className="text-sm text-stone-500 mb-3">
-          Regla anti-solapamiento: cada semana solo puede tenerla una persona.
+          Regla anti-solapamiento: cada día solo puede tenerlo una persona. Selecciona semanas
+          completas (lunes-domingo) o días sueltos — útil para el resto de días que no llegan a
+          formar una semana entera.
         </p>
         <Legend />
         {/* Employees select here; admins without a ficha see it read-only. */}
@@ -89,7 +91,7 @@ async function EmployeeSection({
   const [requests, adjustments] = await Promise.all([
     prisma.vacationRequest.findMany({
       where: { employeeId, year, status: { not: "CANCELADA" } },
-      include: { weeks: { orderBy: { week: "asc" } } },
+      include: { weeks: { orderBy: { week: "asc" } }, days: { orderBy: { date: "asc" } } },
       orderBy: { createdAt: "desc" },
     }),
     prisma.vacationAdjustment.findMany({ where: { employeeId, year }, orderBy: { createdAt: "desc" } }),
@@ -117,9 +119,14 @@ async function EmployeeSection({
             {requests.map((r) => (
               <li key={r.id} className="py-2 flex items-center justify-between text-sm">
                 <div>
-                  <span className="font-medium">Semanas {r.weeks.map((w) => w.week).join(", ")}</span>
+                  <span className="font-medium">
+                    {r.weeks.length > 0 && <>Semanas {r.weeks.map((w) => w.week).join(", ")}</>}
+                    {r.weeks.length > 0 && r.days.length > 0 && " + "}
+                    {r.days.length > 0 && <>{r.days.length} día(s) suelto(s)</>}
+                  </span>
                   <div className="text-xs text-stone-500">
-                    {r.weeks.length} semana(s) · solicitado {fmtDate(r.createdAt)}
+                    {r.weeks.length * 7 + r.days.length} día(s) · solicitado {fmtDate(r.createdAt)}
+                    {r.days.length > 0 && <> · {r.days.map((d) => dateKey(d.date)).join(", ")}</>}
                     {r.decisionNote && <> · motivo: {r.decisionNote}</>}
                   </div>
                 </div>
@@ -157,7 +164,7 @@ async function EmployeeSection({
 function Legend() {
   const items = [
     ["bg-green-50 border-green-200", "Disponible"],
-    ["bg-madre-50 border-madre-600", "Tus semanas"],
+    ["bg-madre-50 border-madre-600", "Tuyo"],
     ["bg-stone-100 border-stone-200", "Ocupada"],
     ["bg-amber-50 border-amber-200", "Bloqueada"],
   ] as const;

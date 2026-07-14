@@ -152,6 +152,21 @@ Pendiente en despliegue (no es código):
 - **Cabeceras de seguridad HTTP** (`next.config.mjs`): `X-Frame-Options: DENY`,
   `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`.
 
+**Vacaciones: días sueltos además de semanas completas**
+- Motivo: 30 días naturales no siempre son un múltiplo de 7 (p. ej. 4 semanas
+  = 28 días + 2 sueltos), y hacía falta poder coger días de la bolsa de uno en
+  uno. Nuevo modelo `VacationDay` (mismo patrón que `VacationWeek`: un
+  `approvedKey` único por `local:fecha` que la BD hace imposible duplicar) —
+  una solicitud puede combinar semanas completas y días sueltos.
+- El cruce entre granularidades (un día suelto de una solicitud que cae dentro
+  de una semana ya aprobada de OTRO empleado, o al revés) no lo cubre un único
+  índice — se comprueba explícitamente dentro de la transacción de aprobación,
+  con aislamiento `SERIALIZABLE` para que dos aprobaciones concurrentes que se
+  solapen a través de ambas tablas no puedan colarse las dos a la vez.
+- El calendario (`WeekCalendar.tsx`) muestra cada semana con sus 7 días; el
+  atajo "Semana completa" solo aparece cuando los 7 días siguen libres — si no,
+  se pueden seleccionar los días sueltos que queden en verde.
+
 **Pendiente REAL (no es código de la app)**
 - **Infra de producción**: hosting bajo control de la propiedad, HTTPS, cifrado en
   reposo, backups diarios + prueba de restauración, DPA art. 28, dominio, y

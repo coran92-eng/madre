@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { isoWeek, isoWeeksInYear, isoWeekMonday, isoWeekRange, weekLabel, approvedKey } from "@/lib/isoweek";
+import {
+  isoWeek, isoWeeksInYear, isoWeekMonday, isoWeekRange, weekLabel, approvedKey,
+  dateKey, dayApprovedKey, dayLabel, isoWeekDays,
+} from "@/lib/isoweek";
 
 describe("ISO week math", () => {
   it("computes the ISO week number", () => {
@@ -34,5 +37,22 @@ describe("ISO week math", () => {
   it("formats labels and keys", () => {
     expect(weekLabel(2026, 30)).toMatch(/\d+ \w+ – \d+ \w+/);
     expect(approvedKey("cdm", 2026, 30)).toBe("cdm:2026:30");
+  });
+
+  it("computes day-level keys and labels", () => {
+    const d = new Date(Date.UTC(2026, 6, 20)); // Monday 20 Jul 2026
+    expect(dateKey(d)).toBe("2026-07-20");
+    expect(dayApprovedKey("cdm", d)).toBe("cdm:2026-07-20");
+    expect(dayLabel(d)).toMatch(/^lun \d+ \w+$/);
+  });
+
+  it("lists the 7 dates of an ISO week, Monday first", () => {
+    const days = isoWeekDays(2026, 30);
+    expect(days).toHaveLength(7);
+    expect(days[0].getUTCDay()).toBe(1); // Monday
+    expect(days[6].getUTCDay()).toBe(0); // Sunday
+    for (let i = 1; i < 7; i++) {
+      expect(days[i].getTime() - days[i - 1].getTime()).toBe(86400000);
+    }
   });
 });

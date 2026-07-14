@@ -4,8 +4,9 @@ import { prisma } from "./db";
 // Pure ISO week math lives in ./isoweek (no side effects, unit-tested).
 export {
   isoWeek, isoWeeksInYear, isoWeekMonday, isoWeekRange, weekLabel, approvedKey,
+  dateKey, dayApprovedKey, dayLabel, isoWeekDays,
 } from "./isoweek";
-import { isoWeekRange, isoWeeksInYear, weekLabel, approvedKey } from "./isoweek";
+import { isoWeeksInYear, weekLabel, isoWeekDays, dateKey, dayLabel } from "./isoweek";
 
 // ── Domain queries ──────────────────────────────────────────────────────────
 
@@ -15,65 +16,97 @@ export async function getVacationYear(localId: string, year: number) {
   });
 }
 
-export type WeekStatus =
-  | { week: number; label: string; state: "available" }
-  | { week: number; label: string; state: "blocked"; reason: string | null }
-  | { week: number; label: string; state: "occupied"; by: string }
-  | { week: number; label: string; state: "mine"; requestStatus: string };
+export type DayState = "available" | "blocked" | "occupied" | "mine";
+
+export type DayCell = {
+  date: string; // yyyy-mm-dd
+  label: string;
+  state: DayState;
+  by?: string; // occupied: nombre del compañero
+  requestStatus?: string; // mine: PENDIENTE | APROBADA
+  reason?: string | null; // blocked: motivo
+};
+
+export type WeekCell = {
+  week: number;
+  label: string;
+  days: DayCell[]; // lunes a domingo
+};
 
 /**
- * Per-week availability for the shared calendar. Enforces the ABSOLUTE
- * anti-overlap rule (spec §4.2): any week already held by a colleague — of any
- * role — is closed for everyone else.
+ * Calendario día a día, agrupado por semana ISO, para el selector de
+ * vacaciones. Un empleado puede reservar semanas completas (lunes-domingo) o
+ * días sueltos — p. ej. cuando el derecho anual no encaja en semanas
+ * completas (30 días = 4 semanas + 2 días sueltos), o para "días generados"
+ * de la bolsa que se quieren coger de uno en uno.
+ *
+ * Regla anti-solapamiento ABSOLUTA (spec §4.2), ahora también día a día: un
+ * día ya reservado — sea porque forma parte de una semana completa aprobada
+ * de un compañero, o porque es un día suelto aprobado — no puede volver a
+ * reservarse para nadie más.
  */
-export async function weekAvailability(
+export async function calendarAvailability(
   localId: string,
   year: number,
   forEmployeeId?: string
-): Promise<WeekStatus[]> {
+): Promise<WeekCell[]> {
   const total = isoWeeksInYear(year);
 
-  const [blocked, occupied] = await Promise.all([
+  const [blocked, occupiedWeeks, occupiedDays, mineWeeks, mineDays] = await Promise.all([
     prisma.blockedWeek.findMany({ where: { localId, year } }),
     prisma.vacationWeek.findMany({
       where: { localId, year, approvedKey: { not: null } },
-      include: {
-        request: { include: { employee: { select: { id: true, firstName: true, lastName: true } } } },
-      },
+      include: { request: { include: { employee: { select: { firstName: true, lastName: true } } } } },
     }),
+    prisma.vacationDay.findMany({
+      where: { localId, year, approvedKey: { not: null } },
+      include: { request: { include: { employee: { select: { firstName: true, lastName: true } } } } },
+    }),
+    forEmployeeId
+      ? prisma.vacationWeek.findMany({
+          where: { localId, year, request: { employeeId: forEmployeeId, status: { in: ["PENDIENTE", "APROBADA"] } } },
+          include: { request: { select: { status: true } } },
+        })
+      : Promise.resolve([]),
+    forEmployeeId
+      ? prisma.vacationDay.findMany({
+          where: { localId, year, request: { employeeId: forEmployeeId, status: { in: ["PENDIENTE", "APROBADA"] } } },
+          include: { request: { select: { status: true } } },
+        })
+      : Promise.resolve([]),
   ]);
 
-  // Weeks belonging to the current employee's PENDING requests (shown as "mine").
-  const mine = forEmployeeId
-    ? await prisma.vacationWeek.findMany({
-        where: {
-          localId,
-          year,
-          request: { employeeId: forEmployeeId, status: { in: ["PENDIENTE", "APROBADA"] } },
-        },
-        include: { request: { select: { status: true, employeeId: true } } },
-      })
-    : [];
-
   const blockedMap = new Map(blocked.map((b) => [b.week, b.reason] as const));
-  const occupiedMap = new Map(
-    occupied.map((w) => [w.week, `${w.request.employee.firstName} ${w.request.employee.lastName}`] as const)
-  );
-  const mineMap = new Map(mine.map((w) => [w.week, w.request.status] as const));
+  const dayOccupiedBy = new Map<string, string>();
+  const dayMineStatus = new Map<string, string>();
 
-  const out: WeekStatus[] = [];
+  for (const w of occupiedWeeks) {
+    const name = `${w.request.employee.firstName} ${w.request.employee.lastName}`;
+    for (const d of isoWeekDays(year, w.week)) dayOccupiedBy.set(dateKey(d), name);
+  }
+  for (const d of occupiedDays) {
+    dayOccupiedBy.set(dateKey(d.date), `${d.request.employee.firstName} ${d.request.employee.lastName}`);
+  }
+  for (const w of mineWeeks) {
+    for (const d of isoWeekDays(year, w.week)) dayMineStatus.set(dateKey(d), w.request.status);
+  }
+  for (const d of mineDays) {
+    dayMineStatus.set(dateKey(d.date), d.request.status);
+  }
+
+  const out: WeekCell[] = [];
   for (let week = 1; week <= total; week++) {
-    const label = weekLabel(year, week);
-    const mineStatus = mineMap.get(week);
-    if (mineStatus) {
-      out.push({ week, label, state: "mine", requestStatus: mineStatus });
-    } else if (occupiedMap.has(week)) {
-      out.push({ week, label, state: "occupied", by: occupiedMap.get(week)! });
-    } else if (blockedMap.has(week)) {
-      out.push({ week, label, state: "blocked", reason: blockedMap.get(week) ?? null });
-    } else {
-      out.push({ week, label, state: "available" });
-    }
+    const days: DayCell[] = isoWeekDays(year, week).map((d) => {
+      const key = dateKey(d);
+      const label = dayLabel(d);
+      const mineStatus = dayMineStatus.get(key);
+      if (mineStatus) return { date: key, label, state: "mine", requestStatus: mineStatus };
+      const by = dayOccupiedBy.get(key);
+      if (by) return { date: key, label, state: "occupied", by };
+      if (blockedMap.has(week)) return { date: key, label, state: "blocked", reason: blockedMap.get(week) ?? null };
+      return { date: key, label, state: "available" };
+    });
+    out.push({ week, label: weekLabel(year, week), days });
   }
   return out;
 }
@@ -158,12 +191,22 @@ export async function employeeBalance(
   const monthsWorked = Math.max(0, monthsThisYear - startMonth);
   const accruedDays = Math.min(entitlementDays, Math.round(monthsWorked * accrualPerMonth));
 
-  const weeks = await prisma.vacationWeek.findMany({
-    where: { localId: employee.localId, year, request: { employeeId } },
-    include: { request: { select: { status: true } } },
-  });
-  const consumedDays = weeks.filter((w) => w.request.status === "APROBADA").length * 7;
-  const pendingDays = weeks.filter((w) => w.request.status === "PENDIENTE").length * 7;
+  const [weeks, days] = await Promise.all([
+    prisma.vacationWeek.findMany({
+      where: { localId: employee.localId, year, request: { employeeId } },
+      include: { request: { select: { status: true } } },
+    }),
+    prisma.vacationDay.findMany({
+      where: { localId: employee.localId, year, request: { employeeId } },
+      include: { request: { select: { status: true } } },
+    }),
+  ]);
+  const consumedDays =
+    weeks.filter((w) => w.request.status === "APROBADA").length * 7 +
+    days.filter((d) => d.request.status === "APROBADA").length;
+  const pendingDays =
+    weeks.filter((w) => w.request.status === "PENDIENTE").length * 7 +
+    days.filter((d) => d.request.status === "PENDIENTE").length;
 
   const adjustments = await prisma.vacationAdjustment.aggregate({
     where: { employeeId, year, status: "APROBADA" },

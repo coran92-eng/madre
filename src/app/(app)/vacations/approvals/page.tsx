@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getListScope } from "@/lib/localcontext";
 import { PageHeader, EmptyState, fmtDate } from "@/components/ui";
+import { isoWeekDays, dateKey } from "@/lib/vacations";
 import { VacationDecision, AdjustmentDecision } from "./ApprovalActions";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export default async function ApprovalsPage() {
       where: { ...scope, status: "PENDIENTE" },
       include: {
         weeks: { orderBy: { week: "asc" } },
+        days: { orderBy: { date: "asc" } },
         employee: { select: { firstName: true, lastName: true, startDate: true } },
       },
       orderBy: { createdAt: "asc" }, // orden de solicitud
@@ -37,20 +39,29 @@ export default async function ApprovalsPage() {
     ORDEN_SOLICITUD: "orden de solicitud", ANTIGUEDAD: "antigüedad", ROTACION: "rotación",
   };
 
-  // Detect weeks requested by more than one pending request (conflicts).
-  const weekCount = new Map<string, number>();
-  for (const r of requests) for (const w of r.weeks) {
-    const k = `${r.localId}:${r.year}:${w.week}`;
-    weekCount.set(k, (weekCount.get(k) ?? 0) + 1);
+  // Detect dates requested by more than one pending request (conflicts) — a
+  // día suelto solapa igual con una semana completa que con otro día suelto.
+  const dateCount = new Map<string, number>();
+  const requestDates = (r: (typeof requests)[number]) => [
+    ...r.weeks.flatMap((w) => isoWeekDays(r.year, w.week)),
+    ...r.days.map((d) => d.date),
+  ];
+  for (const r of requests) {
+    for (const d of requestDates(r)) {
+      const k = `${r.localId}:${r.year}:${dateKey(d)}`;
+      dateCount.set(k, (dateCount.get(k) ?? 0) + 1);
+    }
   }
   const decorated = requests.map((r) => {
-    const conflictWeeks = r.weeks.filter((w) => (weekCount.get(`${r.localId}:${r.year}:${w.week}`) ?? 0) > 1).map((w) => w.week);
+    const conflictDates = requestDates(r)
+      .filter((d) => (dateCount.get(`${r.localId}:${r.year}:${dateKey(d)}`) ?? 0) > 1)
+      .map(dateKey);
     const rule = ruleFor.get(`${r.localId}:${r.year}`) ?? "ORDEN_SOLICITUD";
     const sortKey = rule === "ANTIGUEDAD" ? r.employee.startDate.getTime() : r.createdAt.getTime();
-    return { r, conflictWeeks, rule, sortKey };
+    return { r, conflictDates, rule, sortKey };
   });
   // Conflicts first (to resolve), then by the local's priority rule.
-  decorated.sort((a, b) => (b.conflictWeeks.length > 0 ? 1 : 0) - (a.conflictWeeks.length > 0 ? 1 : 0) || a.sortKey - b.sortKey);
+  decorated.sort((a, b) => (b.conflictDates.length > 0 ? 1 : 0) - (a.conflictDates.length > 0 ? 1 : 0) || a.sortKey - b.sortKey);
 
   return (
     <>
@@ -65,19 +76,22 @@ export default async function ApprovalsPage() {
         <EmptyState>No hay solicitudes pendientes.</EmptyState>
       ) : (
         <div className="space-y-3">
-          {decorated.map(({ r, conflictWeeks, rule }) => (
-            <div key={r.id} className={`card p-4 flex items-start justify-between gap-4 ${conflictWeeks.length ? "border-amber-300 bg-amber-50" : ""}`}>
+          {decorated.map(({ r, conflictDates, rule }) => (
+            <div key={r.id} className={`card p-4 flex items-start justify-between gap-4 ${conflictDates.length ? "border-amber-300 bg-amber-50" : ""}`}>
               <div>
                 <div className="font-medium">{r.employee.firstName} {r.employee.lastName}</div>
                 <div className="text-sm text-stone-600">
-                  Semanas {r.weeks.map((w) => w.week).join(", ")} · {r.weeks.length * 7} días naturales
+                  {r.weeks.length > 0 && <>Semanas {r.weeks.map((w) => w.week).join(", ")}</>}
+                  {r.weeks.length > 0 && r.days.length > 0 && " + "}
+                  {r.days.length > 0 && <>{r.days.length} día(s) suelto(s) ({r.days.map((d) => dateKey(d.date)).join(", ")})</>}
+                  {" · "}{r.weeks.length * 7 + r.days.length} días naturales
                 </div>
                 <div className="text-xs text-stone-400 mt-1">
                   Solicitado {fmtDate(r.createdAt)} · alta empleado {fmtDate(r.employee.startDate)} · prioridad: {RULE_LABEL[rule]}
                 </div>
-                {conflictWeeks.length > 0 && (
+                {conflictDates.length > 0 && (
                   <div className="text-xs text-amber-700 mt-1">
-                    ⚠ Conflicto en la semana {conflictWeeks.join(", ")}: otra solicitud pendiente la pide. Aprobar una cierra la otra (anti-solapamiento).
+                    ⚠ Conflicto en {conflictDates.join(", ")}: otra solicitud pendiente lo pide. Aprobar una cierra la otra (anti-solapamiento).
                   </div>
                 )}
               </div>

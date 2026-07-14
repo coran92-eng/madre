@@ -9,11 +9,21 @@ import { canAccessLocal } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 import { notify } from "@/lib/notify";
 import {
+  isoWeek,
   isoWeekRange,
   isoWeeksInYear,
+  isoWeekDays,
+  dateKey,
   approvedKey,
+  dayApprovedKey,
   getVacationYear,
 } from "@/lib/vacations";
+
+class OverlapError extends Error {
+  constructor(public conflictKey: string) {
+    super(`Solapamiento en ${conflictKey}`);
+  }
+}
 
 async function currentEmployee(userId: string) {
   return prisma.employee.findUnique({ where: { userId } });
@@ -23,7 +33,8 @@ async function currentEmployee(userId: string) {
 
 export async function requestVacation(
   year: number,
-  weeks: number[]
+  weeks: number[],
+  days: string[] = []
 ): Promise<{ error?: string; ok?: boolean }> {
   const user = await requireUser();
   const employee = await currentEmployee(user.id);
@@ -34,18 +45,56 @@ export async function requestVacation(
   if (!cfg?.requestsOpen) return { error: "Las solicitudes de vacaciones no están abiertas." };
 
   const max = isoWeeksInYear(year);
-  const clean = Array.from(new Set(weeks)).filter((w) => Number.isInteger(w) && w >= 1 && w <= max);
-  if (clean.length === 0) return { error: "Selecciona al menos una semana." };
+  const cleanWeeks = Array.from(new Set(weeks)).filter((w) => Number.isInteger(w) && w >= 1 && w <= max);
+  // El rango de fechas del "año ISO" no coincide con el año natural: la
+  // semana 1 puede empezar en diciembre del año anterior (p.ej. semana 1 de
+  // 2026 arranca el lunes 29 dic 2025) — por eso NO se valida por
+  // date.getUTCFullYear(), sino por pertenecer al rango real de semanas 1..max.
+  const yearStart = isoWeekRange(year, 1).start;
+  const yearEnd = isoWeekRange(year, max).end;
+  const cleanDays = Array.from(new Set(days))
+    .map((s) => new Date(`${s}T00:00:00.000Z`))
+    .filter((d) => !isNaN(d.getTime()) && d >= yearStart && d <= yearEnd);
+
+  if (cleanWeeks.length === 0 && cleanDays.length === 0) return { error: "Selecciona al menos una semana o un día." };
+
+  // Un día suelto no puede caer dentro de una de las semanas completas ya
+  // elegidas en la misma solicitud (sería redundante y complica el cálculo).
+  const weekDateKeys = new Set(cleanWeeks.flatMap((w) => isoWeekDays(year, w).map(dateKey)));
+  const overlapWithinRequest = cleanDays.find((d) => weekDateKeys.has(dateKey(d)));
+  if (overlapWithinRequest) {
+    return { error: `El día ${dateKey(overlapWithinRequest)} ya forma parte de una de las semanas seleccionadas.` };
+  }
 
   // Re-validate availability server-side (anti-overlap + blocked).
-  const [blocked, taken] = await Promise.all([
-    prisma.blockedWeek.findMany({ where: { localId: employee.localId, year, week: { in: clean } } }),
-    prisma.vacationWeek.findMany({
-      where: { localId: employee.localId, year, week: { in: clean }, approvedKey: { not: null } },
-    }),
+  const allDates = [...cleanWeeks.flatMap((w) => isoWeekDays(year, w)), ...cleanDays];
+  const [blockedWeeks, takenWeeks, takenDays] = await Promise.all([
+    prisma.blockedWeek.findMany({ where: { localId: employee.localId, year } }),
+    prisma.vacationWeek.findMany({ where: { localId: employee.localId, year, approvedKey: { not: null } } }),
+    prisma.vacationDay.findMany({ where: { localId: employee.localId, year, approvedKey: { not: null }, date: { in: allDates } } }),
   ]);
-  if (blocked.length) return { error: `Semana ${blocked[0].week} está bloqueada (temporada alta).` };
-  if (taken.length) return { error: `Semana ${taken[0].week} ya está ocupada por un compañero.` };
+  const blockedWeekSet = new Set(blockedWeeks.map((b) => b.week));
+  for (const w of cleanWeeks) {
+    if (blockedWeekSet.has(w)) return { error: `Semana ${w} está bloqueada (temporada alta).` };
+  }
+  for (const d of cleanDays) {
+    if (blockedWeekSet.has(isoWeek(d))) return { error: `El día ${dateKey(d)} cae en una semana bloqueada.` };
+  }
+
+  const takenWeekSet = new Set(takenWeeks.map((w) => w.week));
+  for (const w of cleanWeeks) {
+    if (takenWeekSet.has(w)) return { error: `Semana ${w} ya está ocupada por un compañero.` };
+  }
+  const takenWeekDateKeys = new Set(takenWeeks.flatMap((w) => isoWeekDays(year, w.week).map(dateKey)));
+  const takenDayKeys = new Set(takenDays.map((d) => dateKey(d.date)));
+  for (const d of cleanDays) {
+    const k = dateKey(d);
+    if (takenWeekDateKeys.has(k) || takenDayKeys.has(k)) return { error: `El día ${k} ya está ocupado por un compañero.` };
+  }
+  for (const w of cleanWeeks) {
+    const conflictDay = isoWeekDays(year, w).find((d) => takenDayKeys.has(dateKey(d)));
+    if (conflictDay) return { error: `La semana ${w} incluye el día ${dateKey(conflictDay)}, ya ocupado por un compañero.` };
+  }
 
   const request = await prisma.vacationRequest.create({
     data: {
@@ -54,10 +103,13 @@ export async function requestVacation(
       year,
       status: "PENDIENTE",
       weeks: {
-        create: clean.map((w) => {
+        create: cleanWeeks.map((w) => {
           const { start, end } = isoWeekRange(year, w);
           return { localId: employee.localId, year, week: w, startDate: start, endDate: end };
         }),
+      },
+      days: {
+        create: cleanDays.map((date) => ({ localId: employee.localId, year, date })),
       },
     },
   });
@@ -68,7 +120,7 @@ export async function requestVacation(
     action: "vacation.request",
     entity: "VacationRequest",
     entityId: request.id,
-    detail: { year, weeks: clean },
+    detail: { year, weeks: cleanWeeks, days: cleanDays.map(dateKey) },
   });
   revalidatePath("/vacations");
   return { ok: true };
@@ -85,8 +137,9 @@ export async function cancelVacation(requestId: string): Promise<void> {
   if (req.status === "APROBADA" && !isAdmin) throw new Error("Ya aprobada: contacta con tu encargado.");
 
   await prisma.$transaction([
-    // Free the weeks (clears approvedKey so the slot reopens).
+    // Free the weeks and days (clears approvedKey so the slots reopen).
     prisma.vacationWeek.updateMany({ where: { requestId }, data: { approvedKey: null } }),
+    prisma.vacationDay.updateMany({ where: { requestId }, data: { approvedKey: null } }),
     prisma.vacationRequest.update({ where: { id: requestId }, data: { status: "CANCELADA" } }),
   ]);
   await audit({ ...auditContext(user), localId: req.localId, action: "vacation.cancel", entity: "VacationRequest", entityId: requestId });
@@ -98,42 +151,89 @@ export async function cancelVacation(requestId: string): Promise<void> {
 
 export async function approveVacation(requestId: string): Promise<{ error?: string; ok?: boolean }> {
   const user = await requireRole("SUPERADMIN", "ENCARGADO");
-  const req = await prisma.vacationRequest.findUnique({ where: { id: requestId }, include: { weeks: true } });
+  const req = await prisma.vacationRequest.findUnique({ where: { id: requestId }, include: { weeks: true, days: true } });
   if (!req) return { error: "No encontrado." };
   if (!canAccessLocal(user, req.localId)) return { error: "Sin permiso." };
   if (req.status !== "PENDIENTE") return { error: "La solicitud no está pendiente." };
 
-  // A blocked week may have been added after the request.
-  const blocked = await prisma.blockedWeek.findFirst({
-    where: { localId: req.localId, year: req.year, week: { in: req.weeks.map((w) => w.week) } },
-  });
-  if (blocked) return { error: `No se puede aprobar: la semana ${blocked.week} está bloqueada.` };
+  // A blocked week may have been added after the request (weeks, and any
+  // loose day whose ISO week is now blocked).
+  const blockedWeeks = await prisma.blockedWeek.findMany({ where: { localId: req.localId, year: req.year } });
+  const blockedWeekSet = new Set(blockedWeeks.map((b) => b.week));
+  const blockedWeekHit = req.weeks.find((w) => blockedWeekSet.has(w.week));
+  if (blockedWeekHit) return { error: `No se puede aprobar: la semana ${blockedWeekHit.week} está bloqueada.` };
+  const blockedDayHit = req.days.find((d) => blockedWeekSet.has(isoWeek(d.date)));
+  if (blockedDayHit) return { error: `No se puede aprobar: el día ${dateKey(blockedDayHit.date)} cae en una semana bloqueada.` };
 
   try {
-    await prisma.$transaction(async (tx) => {
-      // Setting approvedKey (unique) is what enforces the ABSOLUTE anti-overlap
-      // rule at the database level. A concurrent approval of the same week fails here.
-      for (const w of req.weeks) {
-        await tx.vacationWeek.update({
-          where: { id: w.id },
-          data: { approvedKey: approvedKey(req.localId, req.year, w.week) },
+    // Serializable: el cruce semana-aprobada-de-otro vs. día-suelto-de-esta-
+    // solicitud (y viceversa) se comprueba leyendo otras filas dentro de la
+    // transacción — sin aislamiento serializable, dos aprobaciones concurrentes
+    // que se solapan a nivel semana/día (no vía el mismo índice único) podrían
+    // colarse las dos. Postgres aborta una de las dos con error de
+    // serialización, que se captura abajo como conflicto.
+    await prisma.$transaction(
+      async (tx) => {
+        const allDates = [...req.weeks.flatMap((w) => isoWeekDays(req.year, w.week)), ...req.days.map((d) => d.date)];
+
+        // Días de ESTA solicitud que ya estén aprobados como día suelto en OTRA solicitud.
+        const conflictingDay = allDates.length
+          ? await tx.vacationDay.findFirst({
+              where: { localId: req.localId, requestId: { not: req.id }, approvedKey: { not: null }, date: { in: allDates } },
+            })
+          : null;
+        if (conflictingDay) throw new OverlapError(dateKey(conflictingDay.date));
+
+        // Días de ESTA solicitud que ya estén cubiertos por una SEMANA aprobada de otra solicitud.
+        const approvedWeeksElsewhere = await tx.vacationWeek.findMany({
+          where: { localId: req.localId, year: req.year, requestId: { not: req.id }, approvedKey: { not: null } },
+          select: { week: true },
         });
-      }
-      await tx.vacationRequest.update({
-        where: { id: requestId },
-        data: { status: "APROBADA", decidedById: user.id, decidedAt: new Date() },
-      });
-    });
+        const approvedWeekDateKeys = new Set(approvedWeeksElsewhere.flatMap((w) => isoWeekDays(req.year, w.week).map(dateKey)));
+        const dateKeyHit = allDates.map(dateKey).find((k) => approvedWeekDateKeys.has(k));
+        if (dateKeyHit) throw new OverlapError(dateKeyHit);
+
+        // Setting approvedKey (unique) enforces the ABSOLUTE anti-overlap rule at
+        // the database level for same-granularity conflicts (semana vs. semana,
+        // día vs. día). A concurrent approval of the exact same slot fails here.
+        for (const w of req.weeks) {
+          await tx.vacationWeek.update({ where: { id: w.id }, data: { approvedKey: approvedKey(req.localId, req.year, w.week) } });
+        }
+        for (const d of req.days) {
+          await tx.vacationDay.update({ where: { id: d.id }, data: { approvedKey: dayApprovedKey(req.localId, d.date) } });
+        }
+        await tx.vacationRequest.update({
+          where: { id: requestId },
+          data: { status: "APROBADA", decidedById: user.id, decidedAt: new Date() },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      return { error: "Conflicto: alguna de esas semanas acaba de ser ocupada por otro compañero." };
+    if (err instanceof OverlapError) {
+      return { error: `Conflicto: el día ${err.conflictKey} ya está ocupado por un compañero.` };
+    }
+    if (err instanceof Prisma.PrismaClientKnownRequestError && (err.code === "P2002" || err.code === "P2034")) {
+      return { error: "Conflicto: alguna de esas fechas acaba de ser ocupada por otro compañero." };
     }
     throw err;
   }
 
-  await audit({ ...auditContext(user), localId: req.localId, action: "vacation.approve", entity: "VacationRequest", entityId: requestId, detail: { weeks: req.weeks.map((w) => w.week) } });
+  const daysLabel = req.days.length ? ` y ${req.days.length} día(s) suelto(s)` : "";
+  await audit({
+    ...auditContext(user),
+    localId: req.localId,
+    action: "vacation.approve",
+    entity: "VacationRequest",
+    entityId: requestId,
+    detail: { weeks: req.weeks.map((w) => w.week), days: req.days.map((d) => dateKey(d.date)) },
+  });
   const emp = await prisma.employee.findUnique({ where: { id: req.employeeId }, select: { email: true } });
-  await notify(emp?.email, "Vacaciones aprobadas", `Se han aprobado tus vacaciones (semanas ${req.weeks.map((w) => w.week).join(", ")}).`);
+  await notify(
+    emp?.email,
+    "Vacaciones aprobadas",
+    `Se han aprobado tus vacaciones${req.weeks.length ? ` (semanas ${req.weeks.map((w) => w.week).join(", ")})` : ""}${daysLabel}.`
+  );
   revalidatePath("/vacations");
   revalidatePath("/vacations/approvals");
   return { ok: true };
@@ -148,6 +248,7 @@ export async function rejectVacation(requestId: string, note: string): Promise<{
 
   await prisma.$transaction([
     prisma.vacationWeek.updateMany({ where: { requestId }, data: { approvedKey: null } }),
+    prisma.vacationDay.updateMany({ where: { requestId }, data: { approvedKey: null } }),
     prisma.vacationRequest.update({
       where: { id: requestId },
       data: { status: "RECHAZADA", decisionNote: note || null, decidedById: user.id, decidedAt: new Date() },

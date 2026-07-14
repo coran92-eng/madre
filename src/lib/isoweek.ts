@@ -49,3 +49,28 @@ export function weekLabel(year: number, week: number): string {
 export function approvedKey(localId: string, year: number, week: number): string {
   return `${localId}:${year}:${week}`;
 }
+
+/** yyyy-mm-dd (UTC) — clave estable para un día natural. */
+export function dateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+export function dayApprovedKey(localId: string, date: Date): string {
+  return `${localId}:${dateKey(date)}`;
+}
+
+const WEEKDAYS_ES = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
+
+export function dayLabel(date: Date): string {
+  return `${WEEKDAYS_ES[(date.getUTCDay() + 6) % 7]} ${date.getUTCDate()} ${MONTHS_ES[date.getUTCMonth()]}`;
+}
+
+/** Todas las fechas (UTC medianoche) de una semana ISO, lunes a domingo. */
+export function isoWeekDays(year: number, week: number): Date[] {
+  const monday = isoWeekMonday(year, week);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setUTCDate(monday.getUTCDate() + i);
+    return d;
+  });
+}

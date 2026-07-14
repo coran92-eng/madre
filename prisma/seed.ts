@@ -159,6 +159,26 @@ async function main() {
     },
   });
 
+  // Carla toma 2 días sueltos (no semana completa) — demuestra el reparto de
+  // días naturales que no encajan en semanas enteras (p.ej. 30 días = 4
+  // semanas + 2 sueltos), y que el saldo cuenta 1 día = 1 día, no ×7.
+  const looseDay1 = new Date(Date.UTC(YEAR, 4, 13)); // mié 13 may 2026
+  const looseDay2 = new Date(Date.UTC(YEAR, 4, 14)); // jue 14 may 2026
+  const dayKey = (d: Date) => `${local.id}:${d.toISOString().slice(0, 10)}`;
+  await prisma.vacationRequest.create({
+    data: {
+      localId: local.id,
+      employeeId: emps["Carla"],
+      year: YEAR,
+      status: "APROBADA",
+      days: {
+        create: [looseDay1, looseDay2].map((date) => ({
+          localId: local.id, year: YEAR, date, approvedKey: dayKey(date),
+        })),
+      },
+    },
+  });
+
   // ── FASE 2 demo data + verification ──────────────────────────────────────
   const pinHash = await bcrypt.hash("1234", 12);
   await prisma.employee.updateMany({ where: { localId: local.id }, data: { pinHash } });
@@ -280,6 +300,11 @@ async function main() {
   const required = active * 5;
   const available = totalWeeks - blocked;
 
+  const carlaDays = await prisma.vacationDay.count({
+    where: { request: { employeeId: emps["Carla"], year: YEAR }, approvedKey: { not: null } },
+  });
+  const looseDaysOk = carlaDays === 2;
+
   console.log("─".repeat(60));
   console.log("SEED OK");
   console.log(`  Local: ${local.name} (${local.code})`);
@@ -287,6 +312,7 @@ async function main() {
   console.log(`  Empleados: ana@, bruno@, carla@ (contraseña: madre1234)`);
   console.log(`  Ana aprobada: semanas 30, 31   (req ${anaReq.id.slice(0, 8)})`);
   console.log(`  Bruno pendiente: semana 34      (req ${brunoReq.id.slice(0, 8)})`);
+  console.log(`  Carla aprobada: 2 días sueltos (13-14 may)`);
   console.log("─".repeat(60));
   console.log(`  Fase 2: PIN de fichaje = 1234 · manual, tablón, ausencia, caja y caducidades sembrados`);
   console.log(`  Corazón del bar: 2 puntos APPCC, checklist de apertura, parte de turno y bote de propinas`);
@@ -296,10 +322,11 @@ async function main() {
   console.log(`  [${overlapBlocked ? "PASS" : "FAIL"}] Anti-solapamiento: 2º intento sobre semana 30 rechazado por la BD`);
   console.log(`  [${correctionOk ? "PASS" : "FAIL"}] Fichaje: corrección anotada + valor actualizado (banco de horas)`);
   console.log(`  [${tipsOk ? "PASS" : "FAIL"}] Propinas: el reparto suma exactamente el total del bote`);
+  console.log(`  [${looseDaysOk ? "PASS" : "FAIL"}] Vacaciones: días sueltos de Carla cuentan como 2 d, no 14 (1 semana ≠ suelto)`);
   console.log(`  Capacidad ${YEAR}: ${required} necesarias / ${available} disponibles (${totalWeeks}-${blocked}) → ${required <= available ? "CABE" : "NO CABE"}`);
   console.log("─".repeat(60));
 
-  if (!overlapBlocked || !correctionOk || !tipsOk) process.exit(1);
+  if (!overlapBlocked || !correctionOk || !tipsOk || !looseDaysOk) process.exit(1);
 }
 
 main()
