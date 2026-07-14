@@ -40,8 +40,13 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ## Comprobar qué falla exactamente
 
 Con el código actual, visita `https://tu-sitio.netlify.app/api/health`
-(no requiere login). Devuelve qué variables están configuradas y si la base
-de datos responde — así se ve la causa real en vez del error genérico.
+(no requiere login, y siempre se genera en el momento — no es una respuesta
+guardada de cuando se desplegó). Devuelve qué variables están configuradas,
+si la base de datos responde, y si `SMTP_URL` conecta y autentica de verdad
+(sin enviar ningún email) — así se ve la causa real en vez del error
+genérico. Si el proveedor SMTP no responde en 10 segundos (puerto
+bloqueado, host mal escrito...), el campo `smtp` lo dice explícitamente en
+vez de quedarse colgado.
 
 ## Checklist de variables de entorno (Netlify → Site settings → Environment variables)
 
@@ -50,7 +55,7 @@ de datos responde — así se ve la causa real en vez del error genérico.
 | `DATABASE_URL` | Sí | Postgres alcanzable desde internet, no `localhost` |
 | `SESSION_SECRET` | Sí | 48+ bytes aleatorios |
 | `STORAGE_DIR` | No | En Netlify se ignora: los documentos usan **Netlify Blobs** automáticamente (ver abajo) |
-| `SMTP_URL`, `MAIL_FROM` | No | Sin ellas, los emails se registran en los logs de función en vez de enviarse |
+| `SMTP_URL`, `MAIL_FROM` | No | Sin ellas, los emails (recuperación de contraseña, avisos de vacaciones/ausencias/turnos...) se registran en los logs de función en vez de enviarse. Dar acceso a un empleado NO envía email — solo muestra la contraseña temporal en pantalla para que el admin se la entregue |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_SUBJECT` | No | Sin ellas, las notificaciones push quedan desactivadas (el email sigue funcionando) |
 
 ## Configurar el envío real de email (SMTP)

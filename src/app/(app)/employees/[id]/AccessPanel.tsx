@@ -29,9 +29,7 @@ export default function AccessPanel({
           Contraseña temporal: <code className="font-mono text-base bg-white px-1.5 py-0.5 rounded border">{result.password}</code>
         </p>
         <p className="text-xs text-stone-500 mt-2">
-          También se ha enviado por email a {result.email}. Si no le llega, revisa spam o la
-          configuración de envío — mientras tanto puedes copiarla y entregársela en persona.
-          Deberá cambiarla al entrar.
+          Cópiala y entrégala al empleado — no volverá a mostrarse. Deberá cambiarla al entrar.
         </p>
       </div>
     );

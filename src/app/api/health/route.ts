@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { verifyMailer } from "@/lib/mailer";
+
+// Sin esto, Next.js prerenderiza esta ruta UNA VEZ en el build (no lee
+// request/cookies/headers) y sirve esa respuesta congelada para siempre —
+// justo lo contrario de lo que necesita un endpoint de diagnóstico en vivo.
+export const dynamic = "force-dynamic";
 
 // Diagnóstico de despliegue: no requiere autenticación a propósito, para poder
 // detectar el problema ANTES de poder entrar a la app (p.ej. tras un despliegue
@@ -21,7 +27,17 @@ export async function GET() {
     db = `❌ NO ALCANZABLE: ${err instanceof Error ? err.message.split("\n")[0] : "error desconocido"}`;
   }
 
+  // Comprueba conexión + autenticación SMTP SIN enviar un email (transporter.verify()).
+  // Así se ve el motivo real (credenciales, remitente sin validar, puerto bloqueado...)
+  // en vez de que el email desaparezca silenciosamente en los logs de la función.
+  const mail = await verifyMailer();
+  const smtp = !mail.configured
+    ? "sin configurar (email va a consola)"
+    : mail.ok
+      ? "✅ conecta y autentica correctamente"
+      : `❌ FALLA: ${mail.error}`;
+
   const ok = checks.DATABASE_URL === "configurada" && checks.SESSION_SECRET === "configurada" && db.startsWith("✅");
 
-  return NextResponse.json({ ok, env: checks, database: db }, { status: ok ? 200 : 503 });
+  return NextResponse.json({ ok, env: checks, database: db, smtp }, { status: ok ? 200 : 503 });
 }
