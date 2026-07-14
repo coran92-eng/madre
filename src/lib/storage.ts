@@ -3,14 +3,19 @@ import { promises as fs } from "fs";
 import path from "path";
 
 // Dos backends, misma interfaz (saveFile/readFile/deleteFile):
-//  - Netlify Blobs, cuando la app corre en Netlify (detectado por la env var
-//    NETLIFY que la plataforma inyecta sola) — persiste entre despliegues,
-//    sin credenciales que configurar.
+//  - Netlify Blobs, cuando la app corre en Netlify — persiste entre
+//    despliegues, sin credenciales que configurar.
 //  - Disco local (STORAGE_DIR), para desarrollo y self-hosting (Docker/VPS).
 // En producción fuera de Netlify, sustituir por un bucket privado con URLs
 // firmadas (spec §5/§8) implementando el mismo trío de funciones.
-
-const useNetlifyBlobs = !!process.env.NETLIFY;
+//
+// Detección: NETLIFY_BLOBS_CONTEXT es la variable que la propia librería
+// @netlify/blobs usa para autoconfigurarse (ver getEnvironmentContext en
+// node_modules/@netlify/blobs) — es la señal correcta, a diferencia de la
+// variable genérica NETLIFY, que no está garantizado que llegue al runtime
+// de la función (solo al build) y dejaría esto escribiendo en disco de solo
+// lectura en producción sin avisar.
+const useNetlifyBlobs = !!(process.env.NETLIFY_BLOBS_CONTEXT || process.env.NETLIFY);
 
 function baseDir(): string {
   return path.resolve(process.env.STORAGE_DIR || "./storage");

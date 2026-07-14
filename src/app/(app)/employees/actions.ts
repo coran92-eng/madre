@@ -2,12 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireRole, auditContext, hashPassword, generatePassword } from "@/lib/auth";
+import { requireRole, auditContext, hashPassword, verifyPassword, generatePassword } from "@/lib/auth";
 import { deleteFile } from "@/lib/storage";
 import { canAccessLocal } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
+import { notify } from "@/lib/notify";
 
 const employeeSchema = z.object({
   localId: z.string().min(1),
@@ -211,6 +213,38 @@ export async function provisionAccess(id: string, role: "EMPLEADO" | "ENCARGADO"
 
   revalidatePath(`/employees/${id}`);
   return { password: tempPassword, email: emp.email };
+}
+
+/**
+ * Envía por email la contraseña temporal a petición del admin (botón "Enviar
+ * por email"), en vez de hacerlo automáticamente. Recibe la contraseña en
+ * claro desde el navegador (donde ya se mostró tras crear/resetear el
+ * acceso) y comprueba que coincide con el hash actual antes de enviarla, por
+ * si ya ha cambiado (p. ej. el empleado ya entró y la cambió).
+ */
+export async function sendAccessEmailNow(id: string, password: string): Promise<{ ok?: boolean; error?: string }> {
+  const user = await requireRole("SUPERADMIN", "ENCARGADO");
+  const emp = await prisma.employee.findUnique({ where: { id }, include: { user: true } });
+  if (!emp || !canAccessLocal(user, emp.localId)) return { error: "Sin permiso." };
+  if (!emp.user) return { error: "Este empleado no tiene acceso todavía." };
+  if (!emp.email) return { error: "Este empleado no tiene email." };
+  if (!(await verifyPassword(password, emp.user.passwordHash))) {
+    return { error: "Esa contraseña ya no es válida (puede que se haya cambiado). Genera una nueva." };
+  }
+
+  const h = headers();
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const host = h.get("host") ?? "localhost:3000";
+  const loginUrl = `${proto}://${host}/login`;
+  await notify(
+    emp.email,
+    "Acceso a MADRE",
+    `Hola ${emp.firstName},\n\nYa tienes acceso a MADRE.\n\nEmail: ${emp.email}\nContraseña temporal: ${password}\n\nEntra en ${loginUrl} y te pedirá cambiarla en el primer acceso.`,
+    loginUrl
+  );
+
+  await audit({ ...auditContext(user), localId: emp.localId, action: "employee.send_access_email", entity: "User", entityId: emp.user.id });
+  return { ok: true };
 }
 
 /** Set/replace an employee's tablet clock-in PIN (hashed). Admin only. */

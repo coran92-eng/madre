@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { createUser, setUserActive, resetUserPassword, setUserLocal } from "./actions";
+import { createUser, setUserActive, resetUserPassword, setUserLocal, sendUserPasswordEmail } from "./actions";
 
 export function LocalSelect({
   userId,
@@ -36,12 +36,30 @@ function Sub() {
   return <button className="btn-primary" disabled={pending}>{pending ? "Creando…" : "Crear cuenta"}</button>;
 }
 
-function TempPasswordBox({ email, password }: { email: string; password: string }) {
+function SendEmailButton({ userId, password }: { userId: string; password: string }) {
+  const [pending, start] = useTransition();
+  const [result, setResult] = useState<{ ok?: boolean; error?: string }>();
+  return (
+    <div className="mt-2 flex items-center gap-3">
+      <button
+        className="btn-secondary text-xs px-2 py-1"
+        disabled={pending || result?.ok}
+        onClick={() => start(async () => setResult(await sendUserPasswordEmail(userId, password)))}
+      >
+        {pending ? "Enviando…" : result?.ok ? "Enviado ✓" : "Enviar por email"}
+      </button>
+      {result?.error && <p className="text-xs text-red-600">{result.error}</p>}
+    </div>
+  );
+}
+
+function TempPasswordBox({ id, email, password }: { id: string; email: string; password: string }) {
   return (
     <div className="rounded-md bg-green-50 border border-green-200 p-3 text-sm mt-2">
       <p className="text-stone-700">Cuenta: <code className="font-mono">{email}</code></p>
       <p className="text-stone-700">Contraseña temporal: <code className="font-mono text-base bg-white px-1.5 py-0.5 rounded border">{password}</code></p>
       <p className="text-xs text-stone-500 mt-1">Cópiala y entrégala — no se volverá a mostrar. Deberá cambiarla al entrar.</p>
+      <SendEmailButton userId={id} password={password} />
     </div>
   );
 }
@@ -74,7 +92,7 @@ export function CreateUserForm({ locals }: { locals: { id: string; name: string 
         </div>
       </div>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-      {state.password && state.email && <TempPasswordBox email={state.email} password={state.password} />}
+      {state.password && state.email && state.id && <TempPasswordBox id={state.id} email={state.email} password={state.password} />}
       <Sub />
     </form>
   );
@@ -95,7 +113,10 @@ export function UserActions({ id, active }: { id: string; active: boolean }) {
       </div>
       {reset?.error && <p className="text-xs text-red-600">{reset.error}</p>}
       {reset?.password && (
-        <p className="text-xs text-green-700">Nueva contraseña: <code className="font-mono bg-white px-1 rounded border">{reset.password}</code></p>
+        <div className="text-right">
+          <p className="text-xs text-green-700">Nueva contraseña: <code className="font-mono bg-white px-1 rounded border">{reset.password}</code></p>
+          <SendEmailButton userId={id} password={reset.password} />
+        </div>
       )}
     </div>
   );

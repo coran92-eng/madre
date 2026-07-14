@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireRole, auditContext, hashPassword, generatePassword } from "@/lib/auth";
+import { requireRole, auditContext, hashPassword, verifyPassword, generatePassword } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { notify } from "@/lib/notify";
 
 const schema = z.object({
   email: z.string().email("Email no válido"),
@@ -14,9 +16,9 @@ const schema = z.object({
 
 /** Superadmin creates an admin/staff account (encargado, gestoría or another superadmin). */
 export async function createUser(
-  _prev: { error?: string; password?: string; email?: string },
+  _prev: { error?: string; password?: string; email?: string; id?: string },
   formData: FormData
-): Promise<{ error?: string; password?: string; email?: string }> {
+): Promise<{ error?: string; password?: string; email?: string; id?: string }> {
   const user = await requireRole("SUPERADMIN");
   const parsed = schema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.errors[0]?.message ?? "Datos no válidos" };
@@ -40,7 +42,7 @@ export async function createUser(
   });
   await audit({ ...auditContext(user), localId, action: "user.create", entity: "User", entityId: created.id, detail: { role: d.role } });
   revalidatePath("/users");
-  return { password: tempPassword, email };
+  return { password: tempPassword, email, id: created.id };
 }
 
 export async function setUserActive(id: string, active: boolean): Promise<void> {
@@ -64,6 +66,35 @@ export async function resetUserPassword(id: string): Promise<{ error?: string; p
   await audit({ ...auditContext(user), localId: target.localId, action: "user.reset_password", entity: "User", entityId: id });
   revalidatePath("/users");
   return { password: tempPassword, email: target.email };
+}
+
+/**
+ * Envía por email la contraseña temporal a petición del superadmin (botón
+ * "Enviar por email"), en vez de hacerlo automáticamente. Comprueba que la
+ * contraseña recibida del navegador sigue coincidiendo con el hash actual
+ * antes de enviarla, por si ya ha cambiado.
+ */
+export async function sendUserPasswordEmail(id: string, password: string): Promise<{ ok?: boolean; error?: string }> {
+  const user = await requireRole("SUPERADMIN");
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target) return { error: "Usuario no encontrado." };
+  if (!(await verifyPassword(password, target.passwordHash))) {
+    return { error: "Esa contraseña ya no es válida (puede que se haya cambiado). Genera una nueva." };
+  }
+
+  const h = headers();
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const host = h.get("host") ?? "localhost:3000";
+  const loginUrl = `${proto}://${host}/login`;
+  await notify(
+    target.email,
+    "Acceso a MADRE",
+    `Hola,\n\nSe ha creado/restablecido tu acceso a MADRE.\n\nEmail: ${target.email}\nContraseña temporal: ${password}\n\nEntra en ${loginUrl} y te pedirá cambiarla en el primer acceso.`,
+    loginUrl
+  );
+
+  await audit({ ...auditContext(user), localId: target.localId, action: "user.send_password_email", entity: "User", entityId: id });
+  return { ok: true };
 }
 
 /** Superadmin reasigna el local de una cuenta (encargado/gestoría sin ficha). */

@@ -11,12 +11,17 @@ export const dynamic = "force-dynamic";
 // detectar el problema ANTES de poder entrar a la app (p.ej. tras un despliegue
 // nuevo en Netlify). Nunca devuelve secretos, solo si están presentes o no.
 export async function GET() {
+  // NETLIFY_BLOBS_CONTEXT es la señal que usa la propia librería @netlify/blobs
+  // para autoconfigurarse — a diferencia de la variable genérica NETLIFY, que
+  // no está garantizado que llegue al runtime de la función (solo al build).
+  // Ver src/lib/storage.ts.
+  const onNetlify = !!(process.env.NETLIFY_BLOBS_CONTEXT || process.env.NETLIFY);
   const checks: Record<string, string> = {
     DATABASE_URL: process.env.DATABASE_URL ? "configurada" : "❌ FALTA",
     SESSION_SECRET: process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 16 ? "configurada" : "❌ FALTA o demasiado corta (mín. 16)",
-    STORAGE_DIR: process.env.NETLIFY ? "Netlify Blobs (automático)" : process.env.STORAGE_DIR ? "configurada" : "usa ./storage por defecto",
+    STORAGE_DIR: onNetlify ? "Netlify Blobs (automático)" : process.env.STORAGE_DIR ? "configurada" : "usa ./storage por defecto",
     SMTP_URL: process.env.SMTP_URL ? "configurada" : "sin configurar (email va a consola)",
-    runtime: process.env.NETLIFY ? "Netlify Functions" : "otro (Docker/VPS/local)",
+    runtime: onNetlify ? "Netlify Functions" : "otro (Docker/VPS/local)",
   };
 
   let db: string;

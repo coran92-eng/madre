@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { provisionAccess } from "../actions";
+import { provisionAccess, sendAccessEmailNow } from "../actions";
 
 export default function AccessPanel({
   employeeId,
@@ -13,9 +13,16 @@ export default function AccessPanel({
   const [role, setRole] = useState<"EMPLEADO" | "ENCARGADO">("EMPLEADO");
   const [pending, start] = useTransition();
   const [result, setResult] = useState<{ error?: string; password?: string; email?: string }>();
+  const [sendPending, startSend] = useTransition();
+  const [sendResult, setSendResult] = useState<{ ok?: boolean; error?: string }>();
 
   function go() {
     start(async () => setResult(await provisionAccess(employeeId, role)));
+  }
+
+  function sendEmail() {
+    if (!result?.password) return;
+    startSend(async () => setSendResult(await sendAccessEmailNow(employeeId, result.password!)));
   }
 
   if (result?.password) {
@@ -31,6 +38,12 @@ export default function AccessPanel({
         <p className="text-xs text-stone-500 mt-2">
           Cópiala y entrégala al empleado — no volverá a mostrarse. Deberá cambiarla al entrar.
         </p>
+        <div className="mt-3 flex items-center gap-3">
+          <button className="btn-secondary text-xs px-2 py-1" onClick={sendEmail} disabled={sendPending || sendResult?.ok}>
+            {sendPending ? "Enviando…" : sendResult?.ok ? "Enviado ✓" : "Enviar por email"}
+          </button>
+          {sendResult?.error && <p className="text-xs text-red-600">{sendResult.error}</p>}
+        </div>
       </div>
     );
   }
