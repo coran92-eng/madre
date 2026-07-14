@@ -24,6 +24,7 @@ export default async function VacationsPage({ searchParams }: { searchParams: { 
 
   const weeks = await weekAvailability(localId, year, employee?.id);
   const selectable = !!employee && !employee.deletedAt && !!cfg?.requestsOpen;
+  const balance = employee && !employee.deletedAt ? await employeeBalance(employee.id, year) : null;
 
   return (
     <>
@@ -46,8 +47,8 @@ export default async function VacationsPage({ searchParams }: { searchParams: { 
 
       {isAdmin(user) && <AdminBanner localId={localId} year={year} />}
 
-      {employee && !employee.deletedAt && (
-        <EmployeeSection employeeId={employee.id} localId={localId} year={year} requestsOpen={!!cfg?.requestsOpen} />
+      {employee && !employee.deletedAt && balance && (
+        <EmployeeSection employeeId={employee.id} year={year} requestsOpen={!!cfg?.requestsOpen} balance={balance} />
       )}
 
       {/* Shared calendar (visible to all; only names + dates — spec §4.2) */}
@@ -58,7 +59,7 @@ export default async function VacationsPage({ searchParams }: { searchParams: { 
         </p>
         <Legend />
         {/* Employees select here; admins without a ficha see it read-only. */}
-        <WeekCalendar weeks={weeks} year={year} selectable={selectable} />
+        <WeekCalendar weeks={weeks} year={year} selectable={selectable} balanceDays={balance?.balanceDays} />
       </section>
     </>
   );
@@ -76,17 +77,16 @@ async function AdminBanner({ localId, year }: { localId: string; year: number })
 
 async function EmployeeSection({
   employeeId,
-  localId,
   year,
   requestsOpen,
+  balance,
 }: {
   employeeId: string;
-  localId: string;
   year: number;
   requestsOpen: boolean;
+  balance: Awaited<ReturnType<typeof employeeBalance>>;
 }) {
-  const [balance, requests, adjustments] = await Promise.all([
-    employeeBalance(employeeId, year),
+  const [requests, adjustments] = await Promise.all([
     prisma.vacationRequest.findMany({
       where: { employeeId, year, status: { not: "CANCELADA" } },
       include: { weeks: { orderBy: { week: "asc" } } },

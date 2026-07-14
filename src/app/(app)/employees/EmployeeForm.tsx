@@ -68,51 +68,58 @@ export default function EmployeeForm({
       )}
 
       <fieldset className="card p-4 space-y-3">
-        <legend className="font-semibold px-1">Datos personales</legend>
+        <legend className="font-semibold px-1">Datos esenciales</legend>
         <div className="grid md:grid-cols-2 gap-3">
           <Field name="firstName" label="Nombre" defaultValue={e?.firstName} required />
           <Field name="lastName" label="Apellidos" defaultValue={e?.lastName} required />
-          <Field name="nif" label="NIF / NIE" defaultValue={e?.nif} />
-          <Field name="ssNumber" label="Nº Seguridad Social" defaultValue={e?.ssNumber} />
-          <Field name="iban" label="IBAN" defaultValue={e?.iban} />
-          <Field name="phone" label="Teléfono" defaultValue={e?.phone} />
-          <Field name="email" label="Email (para acceso)" type="email" defaultValue={e?.email} />
+          <Field name="email" label="Email" type="email" defaultValue={e?.email} required />
+          <Field name="phone" label="Teléfono" defaultValue={e?.phone} required />
+          <Field name="startDate" label="Fecha de inicio de contrato" type="date" defaultValue={e?.startDate} required />
         </div>
-        <div className="grid md:grid-cols-2 gap-3">
-          <Field name="emergencyContact" label="Contacto de emergencia" defaultValue={e?.emergencyContact} />
-          <Field name="emergencyPhone" label="Tel. emergencia" defaultValue={e?.emergencyPhone} />
-        </div>
+        <p className="text-xs text-stone-500">
+          La fecha de inicio de contrato se usa para calcular los días de vacaciones devengados.
+        </p>
       </fieldset>
 
-      <fieldset className="card p-4 space-y-3">
-        <legend className="font-semibold px-1">Contrato</legend>
-        <div className="grid md:grid-cols-2 gap-3">
-          <div>
-            <label className="label" htmlFor="contractType">Tipo de contrato</label>
-            <select id="contractType" name="contractType" className="input" defaultValue={e?.contractType ?? "INDEFINIDO"}>
-              <option value="INDEFINIDO">Indefinido</option>
-              <option value="TEMPORAL">Temporal</option>
-              <option value="FIJO_DISCONTINUO">Fijo discontinuo</option>
-              <option value="FORMACION">Formación</option>
-              <option value="PRACTICAS">Prácticas</option>
-            </select>
+      <details className="card p-4">
+        <summary className="font-semibold px-1 cursor-pointer select-none">
+          Datos adicionales (opcional)
+        </summary>
+        <div className="mt-4 space-y-4">
+          <div className="grid md:grid-cols-2 gap-3">
+            <Field name="nif" label="NIF / NIE" defaultValue={e?.nif} />
+            <Field name="ssNumber" label="Nº Seguridad Social" defaultValue={e?.ssNumber} />
+            <Field name="iban" label="IBAN" defaultValue={e?.iban} />
+            <Field name="emergencyContact" label="Contacto de emergencia" defaultValue={e?.emergencyContact} />
+            <Field name="emergencyPhone" label="Tel. emergencia" defaultValue={e?.emergencyPhone} />
           </div>
-          <Field name="weeklyHours" label="Jornada (h/semana)" type="number" step="0.5" defaultValue={e ? String(e.weeklyHours) : "40"} />
-          <Field name="startDate" label="Fecha de alta" type="date" defaultValue={e?.startDate} required />
-          <Field name="endDate" label="Fin de contrato (opcional)" type="date" defaultValue={e?.endDate ?? ""} />
-          <Field name="trialEndDate" label="Fin período de prueba (opcional)" type="date" defaultValue={e?.trialEndDate ?? ""} />
-          <div>
-            <label className="label" htmlFor="status">Estado</label>
-            <select id="status" name="status" className="input" defaultValue={e?.status ?? "ACTIVO"}>
-              <option value="ACTIVO">Activo</option>
-              <option value="EXCEDENCIA">Excedencia</option>
-              <option value="BAJA">Baja</option>
-            </select>
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <label className="label" htmlFor="contractType">Tipo de contrato</label>
+              <select id="contractType" name="contractType" className="input" defaultValue={e?.contractType ?? "INDEFINIDO"}>
+                <option value="INDEFINIDO">Indefinido</option>
+                <option value="TEMPORAL">Temporal</option>
+                <option value="FIJO_DISCONTINUO">Fijo discontinuo</option>
+                <option value="FORMACION">Formación</option>
+                <option value="PRACTICAS">Prácticas</option>
+              </select>
+            </div>
+            <Field name="weeklyHours" label="Jornada (h/semana)" type="number" step="0.5" defaultValue={e ? String(e.weeklyHours) : "40"} />
+            <Field name="endDate" label="Fin de contrato (opcional)" type="date" defaultValue={e?.endDate ?? ""} />
+            <Field name="trialEndDate" label="Fin período de prueba (opcional)" type="date" defaultValue={e?.trialEndDate ?? ""} />
+            <div>
+              <label className="label" htmlFor="status">Estado</label>
+              <select id="status" name="status" className="input" defaultValue={e?.status ?? "ACTIVO"}>
+                <option value="ACTIVO">Activo</option>
+                <option value="EXCEDENCIA">Excedencia</option>
+                <option value="BAJA">Baja</option>
+              </select>
+            </div>
+            <Field name="vacationDaysOverride" label="Días vacaciones (override)" type="number" defaultValue={e?.vacationDaysOverride != null ? String(e.vacationDaysOverride) : ""} />
+            <Field name="hourlyCostOverride" label="Coste/hora (€, opcional)" type="number" step="0.01" defaultValue={e?.hourlyCostOverride != null ? String(e.hourlyCostOverride) : ""} />
           </div>
-          <Field name="vacationDaysOverride" label="Días vacaciones (override)" type="number" defaultValue={e?.vacationDaysOverride != null ? String(e.vacationDaysOverride) : ""} />
-          <Field name="hourlyCostOverride" label="Coste/hora (€, opcional)" type="number" step="0.01" defaultValue={e?.hourlyCostOverride != null ? String(e.hourlyCostOverride) : ""} />
         </div>
-      </fieldset>
+      </details>
 
       {state.error && <p className="text-sm text-red-600 bg-red-50 rounded-md p-2">{state.error}</p>}
       {state.ok && <p className="text-sm text-green-700 bg-green-50 rounded-md p-2">Guardado.</p>}

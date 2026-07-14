@@ -8,10 +8,13 @@ export default function WeekCalendar({
   weeks,
   year,
   selectable,
+  balanceDays,
 }: {
   weeks: WeekStatus[];
   year: number;
   selectable: boolean;
+  /** Saldo de días disponible antes de esta selección (spec §4.2: 1 semana = 7 días). */
+  balanceDays?: number;
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [pending, start] = useTransition();
@@ -78,12 +81,28 @@ export default function WeekCalendar({
       </div>
 
       {selectable && (
-        <div className="mt-4 flex items-center gap-3">
-          <button className="btn-primary" disabled={pending || selected.size === 0} onClick={submit}>
-            {pending ? "Enviando…" : `Solicitar ${selected.size} semana${selected.size === 1 ? "" : "s"}`}
-          </button>
-          {msg?.error && <span className="text-sm text-red-600">{msg.error}</span>}
-          {msg?.ok && <span className="text-sm text-green-700">Solicitud enviada. Pendiente de aprobación.</span>}
+        <div className="mt-4 space-y-2">
+          {balanceDays != null && (
+            <p className="text-sm text-stone-600">
+              Saldo disponible: <strong>{balanceDays} d</strong>
+              {selected.size > 0 && (
+                <>
+                  {" · "}seleccionadas {selected.size} semana{selected.size === 1 ? "" : "s"} ({selected.size * 7} d)
+                  {" · "}quedarían{" "}
+                  <strong className={balanceDays - selected.size * 7 < 0 ? "text-red-600" : ""}>
+                    {balanceDays - selected.size * 7} d
+                  </strong>
+                </>
+              )}
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <button className="btn-primary" disabled={pending || selected.size === 0} onClick={submit}>
+              {pending ? "Enviando…" : `Solicitar ${selected.size} semana${selected.size === 1 ? "" : "s"}`}
+            </button>
+            {msg?.error && <span className="text-sm text-red-600">{msg.error}</span>}
+            {msg?.ok && <span className="text-sm text-green-700">Solicitud enviada. Pendiente de aprobación.</span>}
+          </div>
         </div>
       )}
     </div>
