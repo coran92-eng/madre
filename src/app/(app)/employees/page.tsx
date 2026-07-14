@@ -25,9 +25,14 @@ export default async function EmployeesPage({
         title="Empleados"
         subtitle={showHistoric ? "Histórico (bajas) — se conserva 4 años" : "Personal activo"}
         action={
-          <Link href="/employees/new" className="btn-primary">
-            + Nuevo empleado
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/employees/registrations" className="btn-secondary">
+              Solicitudes de alta
+            </Link>
+            <Link href="/employees/new" className="btn-primary">
+              + Nuevo empleado
+            </Link>
+          </div>
         }
       />
 

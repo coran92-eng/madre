@@ -167,6 +167,35 @@ Pendiente en despliegue (no es código):
   atajo "Semana completa" solo aparece cuando los 7 días siguen libres — si no,
   se pueden seleccionar los días sueltos que queden en verde.
 
+**Autorregistro de empleados**
+- Motivo: quitarle al admin el trabajo de teclear cada dato de cada alta
+  (DNI, IBAN, contrato, horas...) — que lo rellene el propio empleado, y el
+  admin solo revise y apruebe.
+- Flujo: el admin genera una invitación (`createInvite`, en
+  `employees/registrations/actions.ts`) con un token de un solo uso (32 bytes
+  aleatorios) ligada a un local y un email, con caducidad de 7 días —
+  guardada en el nuevo modelo `EmployeeRegistration` (deliberadamente
+  **separado** de `Employee`: mientras no se aprueba no existe ficha ni
+  cuenta, así que un enlace nunca usado o rechazado no deja empleados a
+  medias). El enlace se envía por email y también se muestra en pantalla al
+  admin por si el email no llega.
+- `/join/[token]` es una ruta pública (fuera de `(app)`, mismo patrón que
+  `/login`/`/forgot`/`/reset`) sin autenticación — el futuro empleado rellena
+  ahí sus datos. Un token solo puede enviarse una vez (`submittedAt`) y dejar
+  de ser válido tras aprobarse, rechazarse o caducar.
+- Al enviar el formulario, se avisa por email a superadmin + encargados del
+  local para que sepan que hay algo que revisar.
+- Al **aprobar** (`approveRegistration`): se crean el `Employee` y el `User`
+  en una transacción, y — a diferencia del alta manual desde la ficha, donde
+  el email de credenciales es un botón aparte a petición explícita — aquí SÍ
+  se envía automáticamente en el mismo paso, porque es justo el punto de la
+  función: cerrar el círculo sin que el admin tenga que hacer un segundo
+  clic. La contraseña también se muestra en pantalla al admin como respaldo.
+- `/join/[token]` lleva `dynamic = "force-dynamic"` explícito — tras el bug
+  de `/api/health` (prerenderizada en build y congelada para siempre, ver
+  más abajo) cualquier ruta pública nueva lo declara sin dar por hecho que
+  Next.js la detecte sola como dinámica.
+
 **Pendiente REAL (no es código de la app)**
 - **Infra de producción**: hosting bajo control de la propiedad, HTTPS, cifrado en
   reposo, backups diarios + prueba de restauración, DPA art. 28, dominio, y

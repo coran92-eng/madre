@@ -191,6 +191,55 @@ model Employee {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Autorregistro de empleados: el admin genera un enlace de un solo uso por
+// email; el propio empleado rellena todos sus datos; el admin aprueba (crea
+// la ficha + el acceso) o rechaza. Evita que el admin tenga que teclear cada
+// dato de cada alta.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum RegistrationStatus {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
+model EmployeeRegistration {
+  id      String @id @default(cuid())
+  localId String
+
+  token     String   @unique // enlace: /join/[token]
+  email     String // a quién se envió la invitación
+  expiresAt DateTime
+  status    RegistrationStatus @default(PENDIENTE)
+
+  // Rellenados por el propio empleado al completar el formulario público
+  // (null hasta ese momento). Mismos campos que Employee.
+  submittedAt      DateTime?
+  firstName        String?
+  lastName         String?
+  nif              String?
+  ssNumber         String?
+  iban             String?
+  phone            String?
+  emergencyContact String?
+  emergencyPhone   String?
+  contractType     ContractType?
+  weeklyHours      Float?
+  startDate        DateTime?
+
+  createdById       String // admin que generó la invitación
+  decidedById       String?
+  decidedAt         DateTime?
+  rejectionNote     String?
+  createdEmployeeId String? // ficha creada al aprobar
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([localId, status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Vacaciones (motor de reglas — spec §4.2)
 // ─────────────────────────────────────────────────────────────────────────────
 
