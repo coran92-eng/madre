@@ -236,12 +236,13 @@ export async function sendAccessEmailNow(id: string, password: string): Promise<
   const proto = h.get("x-forwarded-proto") ?? "http";
   const host = h.get("host") ?? "localhost:3000";
   const loginUrl = `${proto}://${host}/login`;
-  await notify(
+  const mail = await notify(
     emp.email,
     "Acceso a MADRE",
     `Hola ${emp.firstName},\n\nYa tienes acceso a MADRE.\n\nEmail: ${emp.email}\nContraseña temporal: ${password}\n\nEntra en ${loginUrl} y te pedirá cambiarla en el primer acceso.`,
     loginUrl
   );
+  if (!mail.ok) return { error: `El email no se pudo enviar: ${mail.error}` };
 
   await audit({ ...auditContext(user), localId: emp.localId, action: "employee.send_access_email", entity: "User", entityId: emp.user.id });
   return { ok: true };

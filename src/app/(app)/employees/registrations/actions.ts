@@ -20,7 +20,7 @@ function hostBase(): string {
 }
 
 /** Genera un enlace de un solo uso y lo envía por email al futuro empleado. */
-export async function createInvite(localId: string, email: string): Promise<{ error?: string; ok?: boolean; url?: string }> {
+export async function createInvite(localId: string, email: string): Promise<{ error?: string; ok?: boolean; url?: string; emailError?: string }> {
   const user = await requireRole("SUPERADMIN", "ENCARGADO");
   if (!canAccessLocal(user, localId)) return { error: "Sin permiso sobre ese local." };
   const parsed = z.string().email().safeParse(email);
@@ -38,7 +38,7 @@ export async function createInvite(localId: string, email: string): Promise<{ er
   });
 
   const url = `${hostBase()}/join/${token}`;
-  await notify(
+  const mail = await notify(
     reg.email,
     "Alta en MADRE",
     `Hola,\n\nTe han invitado a completar tu alta como empleado en MADRE.\n\nRellena tus datos aquí (enlace válido ${INVITE_DAYS} días):\n${url}\n\nUn responsable revisará y aprobará tu solicitud antes de darte acceso.`,
@@ -47,11 +47,13 @@ export async function createInvite(localId: string, email: string): Promise<{ er
 
   await audit({ ...auditContext(user), localId, action: "registration.invite", entity: "EmployeeRegistration", entityId: reg.id, detail: { email: reg.email } });
   revalidatePath("/employees/registrations");
-  return { ok: true, url };
+  // El enlace ya se ha creado y es válido aunque el email falle — se puede
+  // compartir a mano — pero el admin necesita saber que no llegó solo.
+  return { ok: true, url, emailError: mail.ok ? undefined : mail.error };
 }
 
 /** Crea la ficha + acceso a partir de una solicitud ya completada por el empleado, y le envía la contraseña. */
-export async function approveRegistration(id: string): Promise<{ error?: string; ok?: boolean; password?: string; email?: string }> {
+export async function approveRegistration(id: string): Promise<{ error?: string; ok?: boolean; password?: string; email?: string; emailError?: string }> {
   const user = await requireRole("SUPERADMIN", "ENCARGADO");
   const reg = await prisma.employeeRegistration.findUnique({ where: { id } });
   if (!reg) return { error: "No encontrada." };
@@ -101,7 +103,7 @@ export async function approveRegistration(id: string): Promise<{ error?: string;
   });
 
   const loginUrl = `${hostBase()}/login`;
-  await notify(
+  const mail = await notify(
     reg.email,
     "Acceso a MADRE",
     `Hola ${reg.firstName},\n\nTu alta ha sido aprobada. Ya tienes acceso a MADRE.\n\nEmail: ${reg.email}\nContraseña temporal: ${tempPassword}\n\nEntra en ${loginUrl} y te pedirá cambiarla en el primer acceso.`,
@@ -111,7 +113,9 @@ export async function approveRegistration(id: string): Promise<{ error?: string;
   await audit({ ...auditContext(user), localId: reg.localId, action: "registration.approve", entity: "Employee", entityId: employee.id, detail: { registrationId: id } });
   revalidatePath("/employees/registrations");
   revalidatePath("/employees");
-  return { ok: true, password: tempPassword, email: reg.email };
+  // El empleado y el acceso ya existen aunque el email falle — la contraseña
+  // se sigue devolviendo para que el admin la entregue a mano.
+  return { ok: true, password: tempPassword, email: reg.email, emailError: mail.ok ? undefined : mail.error };
 }
 
 export async function rejectRegistration(id: string, note: string): Promise<{ error?: string; ok?: boolean }> {

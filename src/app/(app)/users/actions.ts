@@ -86,12 +86,13 @@ export async function sendUserPasswordEmail(id: string, password: string): Promi
   const proto = h.get("x-forwarded-proto") ?? "http";
   const host = h.get("host") ?? "localhost:3000";
   const loginUrl = `${proto}://${host}/login`;
-  await notify(
+  const mail = await notify(
     target.email,
     "Acceso a MADRE",
     `Hola,\n\nSe ha creado/restablecido tu acceso a MADRE.\n\nEmail: ${target.email}\nContraseña temporal: ${password}\n\nEntra en ${loginUrl} y te pedirá cambiarla en el primer acceso.`,
     loginUrl
   );
+  if (!mail.ok) return { error: `El email no se pudo enviar: ${mail.error}` };
 
   await audit({ ...auditContext(user), localId: target.localId, action: "user.send_password_email", entity: "User", entityId: id });
   return { ok: true };

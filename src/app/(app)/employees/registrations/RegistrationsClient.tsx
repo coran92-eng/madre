@@ -13,7 +13,7 @@ export function InviteForm({
   const [localId, setLocalId] = useState(fixedLocalId ?? locals[0]?.id ?? "");
   const [email, setEmail] = useState("");
   const [pending, start] = useTransition();
-  const [result, setResult] = useState<{ error?: string; ok?: boolean; url?: string }>();
+  const [result, setResult] = useState<{ error?: string; ok?: boolean; url?: string; emailError?: string }>();
 
   function go() {
     start(async () => {
@@ -50,7 +50,14 @@ export function InviteForm({
         </button>
       </div>
       {result?.error && <p className="text-sm text-red-600">{result.error}</p>}
-      {result?.ok && (
+      {result?.ok && result.emailError && (
+        <p className="text-sm text-red-600">
+          El enlace se ha creado, pero el email no se pudo enviar ({result.emailError}). Comparte
+          este enlace a mano:{" "}
+          <code className="font-mono text-xs bg-white px-1 rounded border">{result.url}</code>
+        </p>
+      )}
+      {result?.ok && !result.emailError && (
         <p className="text-sm text-green-700">
           Invitación enviada. Si el email no le llega, comparte este enlace directamente:{" "}
           <code className="font-mono text-xs bg-white px-1 rounded border">{result.url}</code>
@@ -64,7 +71,7 @@ export function RegistrationRow({ id, canDecide }: { id: string; canDecide: bool
   const [pending, start] = useTransition();
   const [note, setNote] = useState("");
   const [showReject, setShowReject] = useState(false);
-  const [result, setResult] = useState<{ error?: string; ok?: boolean; password?: string; email?: string }>();
+  const [result, setResult] = useState<{ error?: string; ok?: boolean; password?: string; email?: string; emailError?: string }>();
 
   function approve() {
     start(async () => setResult(await approveRegistration(id)));
@@ -75,10 +82,14 @@ export function RegistrationRow({ id, canDecide }: { id: string; canDecide: bool
 
   if (result?.ok && result.password) {
     return (
-      <div className="rounded-md bg-green-50 border border-green-200 p-3 text-sm">
-        <p className="font-medium text-green-800">Aprobado. Acceso creado y enviado por email a {result.email}.</p>
+      <div className={`rounded-md border p-3 text-sm ${result.emailError ? "bg-amber-50 border-amber-200" : "bg-green-50 border-green-200"}`}>
+        <p className={`font-medium ${result.emailError ? "text-amber-800" : "text-green-800"}`}>
+          {result.emailError
+            ? `Aprobado, pero el email a ${result.email} no se pudo enviar (${result.emailError}).`
+            : `Aprobado. Acceso creado y enviado por email a ${result.email}.`}
+        </p>
         <p className="text-xs text-stone-500 mt-1">
-          Contraseña temporal (por si el email no llega):{" "}
+          Contraseña temporal{result.emailError ? " — entrégala tú a mano" : " (por si el email no llega)"}:{" "}
           <code className="font-mono bg-white px-1 rounded border">{result.password}</code>
         </p>
       </div>

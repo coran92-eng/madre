@@ -39,7 +39,14 @@ function getTransport(): Transporter | null {
   return transporter;
 }
 
-export async function sendMail(to: string, subject: string, body: string): Promise<void> {
+/**
+ * Never throws — a failed send must not break the calling business action
+ * (e.g. approving a registration still creates the employee even if the
+ * email bounces). Returns { ok, error } so call sites that need to know
+ * whether the email actually left (invites, credential delivery) can tell
+ * the admin instead of silently claiming success.
+ */
+export async function sendMail(to: string, subject: string, body: string): Promise<{ ok: boolean; error?: string }> {
   const from = process.env.MAIL_FROM || "no-reply@madre.local";
   const t = getTransport();
 
@@ -47,14 +54,15 @@ export async function sendMail(to: string, subject: string, body: string): Promi
     console.log(
       `\n──── [MAIL:dev] ────\nFrom: ${from}\nTo:   ${to}\nSubj: ${subject}\n\n${body}\n────────────────────\n`
     );
-    return;
+    return { ok: true };
   }
 
   try {
     await t.sendMail({ from, to, subject, text: body });
+    return { ok: true };
   } catch (err) {
-    // Do not break the user flow (e.g. password reset) on a mail failure.
     console.error("[mailer] send failed:", err);
+    return { ok: false, error: err instanceof Error ? err.message.split("\n")[0] : "error desconocido" };
   }
 }
 
