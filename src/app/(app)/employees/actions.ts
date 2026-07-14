@@ -384,20 +384,39 @@ export async function purgeAllEmployees(localId: string, confirm: string): Promi
   if (!canAccessLocal(user, localId)) return { error: "Sin permiso sobre ese local." };
 
   const employees = await prisma.employee.findMany({ where: { localId }, select: { id: true, userId: true } });
+
+  // Una transacción POR empleado, no una gigante para todos: con muchos
+  // empleados y datos acumulados de meses de pruebas, una única transacción
+  // podía superar el timeout por defecto de Prisma (5 s) y abortar sin
+  // borrar nada — un fallo real que ocurrió en producción y no en las
+  // pruebas locales (con solo 3 empleados y poco volumen de datos). Así,
+  // un empleado problemático no bloquea el resto, y cada borrado tiene
+  // margen de sobra.
+  let deleted = 0;
+  let firstError: string | undefined;
   for (const emp of employees) {
-    const keys = await employeeFileKeys(emp.id);
-    for (const k of keys) await deleteFile(k);
-  }
-
-  await prisma.$transaction(async (tx) => {
-    for (const emp of employees) {
-      await deleteEmployeeCascade(tx, emp.id, emp.userId);
+    try {
+      const keys = await employeeFileKeys(emp.id);
+      for (const k of keys) await deleteFile(k);
+      await prisma.$transaction((tx) => deleteEmployeeCascade(tx, emp.id, emp.userId), { timeout: 30_000 });
+      deleted++;
+    } catch (err) {
+      console.error(`[purgeAllEmployees] fallo con empleado ${emp.id}:`, err);
+      firstError ??= err instanceof Error ? err.message.split("\n")[0] : "error desconocido";
     }
-    await tx.employeeRegistration.deleteMany({ where: { localId } });
-  });
+  }
+  await prisma.employeeRegistration.deleteMany({ where: { localId } }).catch((err) => console.error("[purgeAllEmployees] registrations:", err));
 
-  await audit({ ...auditContext(user), localId, action: "arco.purge_all", entity: "Employee", detail: { count: employees.length } });
+  await audit({ ...auditContext(user), localId, action: "arco.purge_all", entity: "Employee", detail: { count: deleted, total: employees.length, failed: employees.length - deleted } });
   revalidatePath("/employees");
   revalidatePath("/employees/registrations");
-  return { ok: true, count: employees.length };
+
+  if (deleted < employees.length) {
+    return {
+      ok: deleted > 0,
+      count: deleted,
+      error: `Se borraron ${deleted} de ${employees.length}. ${employees.length - deleted} fallaron${firstError ? ` (${firstError})` : ""} — vuelve a intentarlo, ya solo quedan los que fallaron.`,
+    };
+  }
+  return { ok: true, count: deleted };
 }

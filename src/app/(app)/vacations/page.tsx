@@ -61,7 +61,13 @@ export default async function VacationsPage({ searchParams }: { searchParams: { 
         </p>
         <Legend />
         {/* Employees select here; admins without a ficha see it read-only. */}
-        <WeekCalendar weeks={weeks} year={year} selectable={selectable} balanceDays={balance?.balanceDays} />
+        <WeekCalendar
+          weeks={weeks}
+          year={year}
+          selectable={selectable}
+          balanceDays={balance?.balanceDays}
+          pendingDays={balance?.pendingDays}
+        />
       </section>
     </>
   );

@@ -11,12 +11,15 @@ export default function WeekCalendar({
   year,
   selectable,
   balanceDays,
+  pendingDays,
 }: {
   weeks: WeekCell[];
   year: number;
   selectable: boolean;
   /** Saldo de días disponible antes de esta selección. */
   balanceDays?: number;
+  /** Días ya pedidos en otras solicitudes pendientes de aprobar. */
+  pendingDays?: number;
 }) {
   const [selectedWeeks, setSelectedWeeks] = useState<Set<number>>(new Set());
   const [selectedDays, setSelectedDays] = useState<Set<string>>(new Set());
@@ -55,6 +58,10 @@ export default function WeekCalendar({
   }
 
   const totalSelected = selectedWeeks.size * 7 + selectedDays.size;
+  // Igual que el servidor: saldo menos lo que ya está pendiente de aprobar
+  // en otras solicitudes (spec: no dejar pedir más de lo que queda).
+  const available = balanceDays != null ? balanceDays - (pendingDays ?? 0) : undefined;
+  const exceedsBalance = available != null && totalSelected > available;
 
   return (
     <div>
@@ -141,21 +148,25 @@ export default function WeekCalendar({
         <div className="mt-4 space-y-2">
           {balanceDays != null && (
             <p className="text-sm text-stone-600">
-              Saldo disponible: <strong>{balanceDays} d</strong>
+              Saldo disponible: <strong>{available} d</strong>
+              {!!pendingDays && ` (${balanceDays} d de saldo − ${pendingDays} d ya pendientes de aprobar)`}
               {totalSelected > 0 && (
                 <>
                   {" · "}seleccionado{totalSelected === 1 ? "" : "s"} {totalSelected} día{totalSelected === 1 ? "" : "s"}
                   {selectedWeeks.size > 0 && ` (${selectedWeeks.size} semana${selectedWeeks.size === 1 ? "" : "s"}${selectedDays.size > 0 ? ` + ${selectedDays.size} suelto${selectedDays.size === 1 ? "" : "s"}` : ""})`}
                   {" · "}quedarían{" "}
-                  <strong className={balanceDays - totalSelected < 0 ? "text-red-600" : ""}>
-                    {balanceDays - totalSelected} d
-                  </strong>
+                  <strong className={exceedsBalance ? "text-red-600" : ""}>{(available ?? 0) - totalSelected} d</strong>
                 </>
               )}
             </p>
           )}
+          {exceedsBalance && (
+            <p className="text-sm text-red-600">
+              Has seleccionado más días de los que tienes disponibles. Quita alguno para poder enviar la solicitud.
+            </p>
+          )}
           <div className="flex items-center gap-3">
-            <button className="btn-primary" disabled={pending || totalSelected === 0} onClick={submit}>
+            <button className="btn-primary" disabled={pending || totalSelected === 0 || exceedsBalance} onClick={submit}>
               {pending ? "Enviando…" : `Solicitar ${totalSelected} día${totalSelected === 1 ? "" : "s"}`}
             </button>
             {msg?.error && <span className="text-sm text-red-600">{msg.error}</span>}

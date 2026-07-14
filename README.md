@@ -97,6 +97,7 @@ soft-delete para conservar el histórico 4 años.
 | Cabeceras de seguridad HTTP (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`) | ✅ |
 | Coste real de personal en el Panel de dirección: coste/hora por local (por defecto) y por empleado (override), € y % sobre ventas | ✅ |
 | Días sueltos además de semanas completas en vacaciones (con anti-solapamiento día a día) | ✅ |
+| No se puede solicitar más días de vacaciones de los que quedan de saldo | ✅ |
 | **Autorregistro de empleados**: el admin invita por email con un enlace de un solo uso; el empleado rellena todos sus datos (DNI, IBAN, contrato...); el admin aprueba y el acceso se crea y se envía solo | ✅ |
 
 Lo único pendiente es **infra de producción** y **decisiones de la propiedad** — ver `docs/DECISIONS.md`.

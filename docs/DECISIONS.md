@@ -217,6 +217,24 @@ Pendiente en despliegue (no es código):
   empleados con fichajes, vacaciones (semana + día suelto) y una cuenta cada
   uno quedan en 0 tras un clic, sin errores de clave foránea, con los 3
   locales, el año de vacaciones y las plantillas intactos.
+- **Fix posterior**: en producción, con más empleados y datos acumulados de
+  meses de pruebas, la primera versión (una única transacción para todos los
+  empleados) fallaba con "Algo ha ido mal" — muy probablemente el timeout por
+  defecto de una transacción interactiva de Prisma (5 s), superado al
+  recorrer el cascade de varios empleados con volumen real en una sola
+  transacción contra una base de datos remota (Neon). Ahora cada empleado se
+  borra en su propia transacción (30 s de margen cada una): un empleado
+  problemático no bloquea el resto, y si alguno falla se informa cuántos se
+  borraron y cuántos quedan — basta con volver a pulsar el botón.
+
+**Vacaciones: no se puede pedir más de lo que queda**
+- `requestVacation` comprueba, antes de crear la solicitud, que
+  `semanas×7 + días sueltos` no supere `saldo aprobado − días ya pendientes
+  de aprobar en otras solicitudes` (no solo el saldo bruto: dos solicitudes
+  pendientes podrían sumar de más y solo saltar al aprobar la segunda). El
+  calendario hace el mismo cálculo en el cliente para deshabilitar el botón
+  de enviar antes de llegar al servidor, que sigue siendo quien lo hace
+  cumplir de verdad.
 
 **Pendiente REAL (no es código de la app)**
 - **Infra de producción**: hosting bajo control de la propiedad, HTTPS, cifrado en

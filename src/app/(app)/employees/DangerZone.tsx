@@ -13,7 +13,7 @@ export default function DangerZone({ localId, localName, count }: { localId: str
     start(async () => setResult(await purgeAllEmployees(localId, confirm)));
   }
 
-  if (result?.ok) {
+  if (result?.ok && !result.error) {
     return (
       <div className="card p-4 border-red-200 bg-red-50 mt-8">
         <p className="text-sm text-red-800 font-medium">

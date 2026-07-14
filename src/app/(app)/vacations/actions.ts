@@ -17,6 +17,7 @@ import {
   approvedKey,
   dayApprovedKey,
   getVacationYear,
+  employeeBalance,
 } from "@/lib/vacations";
 
 class OverlapError extends Error {
@@ -57,6 +58,19 @@ export async function requestVacation(
     .filter((d) => !isNaN(d.getTime()) && d >= yearStart && d <= yearEnd);
 
   if (cleanWeeks.length === 0 && cleanDays.length === 0) return { error: "Selecciona al menos una semana o un día." };
+
+  // No se puede pedir más de lo que queda: saldo aprobado menos lo que ya
+  // está pendiente de aprobar en OTRAS solicitudes (si no, dos solicitudes
+  // pendientes podrían sumar más que el derecho anual y solo saltar al
+  // aprobar la segunda, cuando ya es tarde para reajustar).
+  const requestedDays = cleanWeeks.length * 7 + cleanDays.length;
+  const balance = await employeeBalance(employee.id, year);
+  const available = balance.balanceDays - balance.pendingDays;
+  if (requestedDays > available) {
+    return {
+      error: `Solo tienes ${available} día(s) disponibles y estás pidiendo ${requestedDays}. Ajusta la selección.`,
+    };
+  }
 
   // Un día suelto no puede caer dentro de una de las semanas completas ya
   // elegidas en la misma solicitud (sería redundante y complica el cálculo).
