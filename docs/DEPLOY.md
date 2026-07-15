@@ -86,6 +86,49 @@ encaja con el requisito de RGPD del spec, 300 emails/día gratis):
 Cualquier otro proveedor SMTP (Mailjet, SES, Postmark...) funciona igual:
 solo cambia el host/puerto/credenciales de `SMTP_URL`.
 
+### "Dice enviado" pero el email nunca llega (sin error en pantalla)
+
+Si `/api/health` muestra `smtp: ✅ conecta y autentica correctamente` y la
+app dice "enviado" en verde (o sin `emailError`), pero el email nunca
+aparece en la bandeja del destinatario — **ni en spam** —, casi siempre es
+un fallo de **alineación DMARC**, no un bug de la app ni de la conexión SMTP:
+
+- `sendMail()` solo puede reportar un error si el proveedor SMTP **rechaza
+  el envío al conectar** (autenticación, cuota, remitente sin validar en
+  Brevo). Si Brevo acepta el mensaje (`250 OK`) pero el servidor del
+  **destinatario** lo descarta después por DMARC, eso ocurre fuera de la
+  conversación SMTP — invisible para el código, por diseño del protocolo.
+- Esto pasa casi siempre porque `MAIL_FROM` usa un dominio de correo
+  gratuito (`@gmail.com`, `@outlook.com`...) en vez de un dominio propio.
+  Gmail/Outlook publican una política DMARC estricta (`p=reject`) para su
+  propio dominio: cualquier email que diga `From: algo@gmail.com` pero que
+  no salga de la infraestructura real de Google se descarta o va a spam en
+  la mayoría de proveedores — aunque el remitente esté "validado" en Brevo
+  como *Sender* individual (eso solo confirma que esa bandeja existe, no
+  autoriza a Brevo a firmar en nombre de `gmail.com`).
+
+**Solución permanente — autenticar un dominio propio en Brevo** (no un
+remitente suelto):
+
+1. Brevo → **Senders, Domains & Dedicated IPs → Domains** → añade un
+   dominio que controles de verdad (el de la empresa, o cualquier dominio
+   propio; no hace falta que sea el mismo del sitio web).
+2. Brevo da 2-3 registros DNS (SPF + DKIM) — añádelos en el proveedor de
+   DNS de ese dominio (donde se compró/gestiona).
+3. Una vez verificado (minutos u horas según el DNS), pon `MAIL_FROM` en
+   Netlify a una dirección de ese dominio, p. ej.
+   `MADRE <no-reply@tudominio.com>`.
+4. **Deploys → Trigger deploy → Clear cache and deploy**.
+
+Con el dominio autenticado (no solo un remitente individual validado), la
+entrega es fiable para cualquier destinatario, ya que Brevo firma los
+correos con DKIM del dominio y pasa la alineación DMARC.
+
+**Para confirmar el diagnóstico sin tocar DNS**: Brevo → **Transactional →
+Email Activity** — busca el email enviado y verás su estado real
+(`Delivered`, `Blocked`, `Soft bounce`...), en vez de fiarte solo de lo que
+dice la pantalla de MADRE (que únicamente sabe si Brevo aceptó el envío).
+
 ## Almacenamiento de documentos en Netlify
 
 Netlify Functions tiene el disco de solo lectura (salvo `/tmp`, que se borra
